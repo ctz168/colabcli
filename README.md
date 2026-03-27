@@ -40,10 +40,14 @@ colabmcp remote notebook.ipynb --url https://your-ngrok-url.ngrok-free.app
 - 📓 **Run Jupyter Notebooks locally** - Execute `.ipynb` files directly from CLI
 - 🌐 **Remote execution** - Run notebooks on Google Colab with GPU support
 - 📊 **Streaming output** - See each cell's output in real-time as it executes
-- 🔧 **IPython magic support** - Handle `%` and `!` commands locally
+- 🔧 **IPython magic support** - Full support for `%cd`, `%env`, `!cmd`, `%%bash`, etc.
 - 🔄 **Variable persistence** - Variables persist between cells
 - ⏱️ **Execution timing** - Track execution time for each cell
 - 🛑 **Error handling** - Stop on error or continue execution
+- ⏹️ **Interrupt execution** - Stop long-running code without killing the server
+- 📊 **Status tracking** - Know current directory, running status, command history
+- 📜 **Command history** - View past executions and their results
+- 🚫 **Duplicate detection** - Skip redundant `cd` commands automatically
 - 📝 **Notebook conversion** - Convert `.ipynb` to `.py` scripts
 - 🔍 **Notebook inspection** - View notebook structure and metadata
 
@@ -119,10 +123,13 @@ colabmcp repl
 |---------|-------------|
 | `colabmcp run` | Run notebook locally with streaming output |
 | `colabmcp remote` | Run notebook on remote ColabMCP server |
+| `colabmcp health` | Check remote server health and environment |
+| `colabmcp status` | Get current execution status and directory |
+| `colabmcp interrupt` | Interrupt current execution (keeps server running) |
+| `colabmcp history` | View command execution history |
 | `colabmcp info` | Show notebook information |
 | `colabmcp cells` | List and preview cells |
 | `colabmcp convert` | Convert notebook to Python script |
-| `colabmcp health` | Check remote server health |
 | `colabmcp repl` | Start interactive Python REPL |
 
 ### `colabmcp run`
@@ -153,6 +160,52 @@ Options:
   -t, --timeout INTEGER       Timeout in seconds [default: 300]
   -V, --verbose               Verbose output
 ```
+
+### `colabmcp interrupt`
+
+```bash
+colabmcp interrupt --url URL
+
+# Interrupt the current execution without stopping the server
+colabmcp interrupt -u https://your-server.ngrok-free.app
+```
+
+### `colabmcp status`
+
+```bash
+colabmcp status --url URL
+
+# Get current directory, execution status, and recent commands
+colabmcp status -u https://your-server.ngrok-free.app
+```
+
+### `colabmcp history`
+
+```bash
+colabmcp history --url URL [OPTIONS]
+
+Options:
+  -l, --limit INTEGER         Number of entries to show [default: 20]
+
+# View command execution history
+colabmcp history -u https://your-server.ngrok-free.app
+colabmcp history -u https://your-server.ngrok-free.app --limit 50
+```
+
+## 🔧 Supported IPython Magic Commands
+
+| Magic Command | Example | Description |
+|--------------|---------|-------------|
+| `%cd` | `%cd /content/project` | Change directory |
+| `%pwd` | `%pwd` | Print working directory |
+| `%env` | `%env`, `%env VAR` | Show/get environment variables |
+| `%set_env` | `%set_env VAR value` | Set environment variable |
+| `%pip` | `%pip install package` | Install Python package |
+| `!cmd` | `!git clone URL` | Execute shell command |
+| `%%writefile` | `%%writefile file.py` | Write cell content to file |
+| `%%bash` | `%%bash` | Run cell as bash script |
+| `%time` | `%time func()` | Time execution |
+| `%who` | `%who` | List variables |
 
 ## 📝 Output Example
 

@@ -316,6 +316,7 @@ class RemoteExecutionEngine(ExecutionEngine):
     Execute notebook cells on a remote ColabMCP server with streaming output.
 
     Uses Server-Sent Events (SSE) or polling for streaming output.
+    Supports execution interruption and status tracking.
     """
 
     def __init__(self, base_url: str, timeout: int = 300):
@@ -323,6 +324,13 @@ class RemoteExecutionEngine(ExecutionEngine):
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
         self._setup_session()
+        self._execution_state = {
+            "current_directory": "/content",
+            "command_history": [],
+            "installed_packages": set(),
+            "last_execution_time": None,
+            "is_executing": False
+        }
 
     def _setup_session(self):
         """Setup HTTP session"""
@@ -372,6 +380,29 @@ class RemoteExecutionEngine(ExecutionEngine):
             # Prepare code - handle magic commands
             code = self._prepare_code(cell.source)
 
+            # Check if this is a duplicate cd command (optimization)
+            if "os.chdir(" in code:
+                import re
+                match = re.search(r"os\.chdir\(['\"]([^'\"]+)['\"]\)", code)
+                if match:
+                    target_dir = match.group(1)
+                    # Check current state
+                    status = self.get_status()
+                    current_dir = status.get("current_directory", "")
+                    if current_dir == target_dir:
+                        # Already in this directory, skip
+                        self.output_queue.put(StreamChunk(
+                            cell_index=cell.index,
+                            stream_type='stdout',
+                            content=f"⏭️ 已在目录 {target_dir}，跳过切换\n"
+                        ))
+                        return CellOutput(
+                            cell_index=cell.index,
+                            status=ExecutionStatus.SUCCESS,
+                            stdout=f"已在目录 {target_dir}，跳过切换",
+                            execution_time=0.0
+                        )
+
             # Execute on remote server
             response = self.session.post(
                 f"{self.base_url}/execute",
@@ -384,28 +415,50 @@ class RemoteExecutionEngine(ExecutionEngine):
             response.raise_for_status()
             result = response.json()
 
+            # Check if server was busy
+            if result.get("error") == "另一个代码正在执行中，请稍后重试":
+                self.output_queue.put(StreamChunk(
+                    cell_index=cell.index,
+                    stream_type='error',
+                    content="⚠️ 服务器繁忙，正在等待...\n"
+                ))
+                # Wait and retry once
+                time.sleep(2)
+                response = self.session.post(
+                    f"{self.base_url}/execute",
+                    json={"code": code, "timeout": self.timeout},
+                    timeout=self.timeout + 30
+                )
+                result = response.json()
+
             # Stream output in real-time (simulated for non-streaming server)
-            if result.get("stdout"):
+            stdout_content = result.get("stdout", "")
+            stderr_content = result.get("stderr", "")
+
+            if stdout_content:
                 self.output_queue.put(StreamChunk(
                     cell_index=cell.index,
                     stream_type='stdout',
-                    content=result["stdout"]
+                    content=stdout_content
                 ))
 
-            if result.get("stderr"):
+            if stderr_content:
                 self.output_queue.put(StreamChunk(
                     cell_index=cell.index,
                     stream_type='stderr',
-                    content=result["stderr"]
+                    content=stderr_content
                 ))
+
+            # Update local state tracking
+            self._update_state_from_code(code, stdout_content)
 
             # Build output
             if result.get("success"):
                 output = CellOutput(
                     cell_index=cell.index,
                     status=ExecutionStatus.SUCCESS,
-                    stdout=result.get("stdout", ""),
-                    stderr=result.get("stderr", ""),
+                    stdout=stdout_content,
+                    stderr=stderr_content,
                     execution_time=result.get("execution_time_sec", time.time() - start_time),
                     variables=result.get("variables", [])
                 )
@@ -419,8 +472,8 @@ class RemoteExecutionEngine(ExecutionEngine):
                 output = CellOutput(
                     cell_index=cell.index,
                     status=ExecutionStatus.ERROR,
-                    stdout=result.get("stdout", ""),
-                    stderr=result.get("stderr", ""),
+                    stdout=stdout_content,
+                    stderr=stderr_content,
                     error=result.get("error"),
                     error_type=result.get("error_type"),
                     traceback=result.get("traceback"),
@@ -627,6 +680,103 @@ class RemoteExecutionEngine(ExecutionEngine):
             return response.json()
         except Exception as e:
             return {"error": str(e)}
+
+    def interrupt(self) -> Dict[str, Any]:
+        """
+        Interrupt the current execution on the remote server.
+        Does NOT stop the server itself, only the running code.
+        """
+        try:
+            response = self.session.post(
+                f"{self.base_url}/interrupt",
+                timeout=10
+            )
+            response.raise_for_status()
+            result = response.json()
+            # Update local state
+            if result.get("success"):
+                self._execution_state["is_executing"] = False
+            return result
+        except Exception as e:
+            return {"error": str(e), "success": False}
+
+    def get_status(self) -> Dict[str, Any]:
+        """
+        Get the current execution status from the remote server.
+        Returns: current directory, running status, last command, etc.
+        """
+        try:
+            response = self.session.get(
+                f"{self.base_url}/status",
+                timeout=10
+            )
+            response.raise_for_status()
+            result = response.json()
+            # Sync local state
+            if "current_directory" in result:
+                self._execution_state["current_directory"] = result["current_directory"]
+            if "is_executing" in result:
+                self._execution_state["is_executing"] = result["is_executing"]
+            return result
+        except Exception as e:
+            return {"error": str(e)}
+
+    def get_history(self, limit: int = 20) -> Dict[str, Any]:
+        """
+        Get command execution history from the remote server.
+        """
+        try:
+            response = self.session.get(
+                f"{self.base_url}/history",
+                params={"limit": limit},
+                timeout=10
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return {"error": str(e)}
+
+    def sync_state(self) -> Dict[str, Any]:
+        """
+        Synchronize local state with remote server.
+        Returns current directory and execution status.
+        """
+        status = self.get_status()
+        if "error" not in status:
+            self._execution_state["current_directory"] = status.get("current_directory", "/content")
+            self._execution_state["is_executing"] = status.get("is_executing", False)
+        return status
+
+    def _update_state_from_code(self, code: str, stdout: str = ""):
+        """
+        Update local state tracking based on executed code.
+        Track directory changes, pip installs, etc.
+        """
+        # Track cd commands
+        if "os.chdir(" in code:
+            import re
+            match = re.search(r"os\.chdir\(['\"]([^'\"]+)['\"]\)", code)
+            if match:
+                self._execution_state["current_directory"] = match.group(1)
+
+        # Track pip installs
+        if "pip install" in code or "pip uninstall" in code:
+            import re
+            # Extract package names
+            matches = re.findall(r'pip\s+(?:install|uninstall)\s+([^\s]+)', code)
+            for pkg in matches:
+                if "install" in code:
+                    self._execution_state["installed_packages"].add(pkg)
+
+        # Add to history
+        self._execution_state["command_history"].append({
+            "code": code[:200] + "..." if len(code) > 200 else code,
+            "timestamp": time.time(),
+            "output_preview": stdout[:100] if stdout else ""
+        })
+        # Keep only last 50 commands
+        if len(self._execution_state["command_history"]) > 50:
+            self._execution_state["command_history"] = self._execution_state["command_history"][-50:]
 
 
 class StreamingExecutor:

@@ -587,5 +587,124 @@ def repl():
             break
 
 
+@main.command()
+@click.option('--url', '-u', required=True, help='ColabMCP server URL')
+def interrupt(url):
+    """
+    Interrupt the current execution on the remote server.
+    Does NOT stop the server, only the running code.
+
+    Example:
+        colabmcp interrupt --url https://your-server.ngrok-free.app
+    """
+    print_banner()
+
+    console.print(f"[yellow]⏹️ Interrupting execution on: {url}[/yellow]\n")
+
+    engine = RemoteExecutionEngine(url)
+    result = engine.interrupt()
+
+    if result.get("success"):
+        console.print(f"[green]✅ 执行已中断[/green]")
+        if result.get("message"):
+            console.print(f"[dim]{result['message']}[/dim]")
+    else:
+        error = result.get("error", "Unknown error")
+        console.print(f"[red]❌ 中断失败: {error}[/red]")
+        sys.exit(1)
+
+
+@main.command()
+@click.option('--url', '-u', required=True, help='ColabMCP server URL')
+def status(url):
+    """
+    Get the current execution status from the remote server.
+    Shows current directory, running status, last command, etc.
+
+    Example:
+        colabmcp status --url https://your-server.ngrok-free.app
+    """
+    print_banner()
+
+    console.print(f"[cyan]📊 Getting status from: {url}[/cyan]\n")
+
+    engine = RemoteExecutionEngine(url)
+    result = engine.get_status()
+
+    if "error" in result:
+        console.print(f"[red]❌ 获取状态失败: {result['error']}[/red]")
+        sys.exit(1)
+
+    # Display status info
+    table = Table(title="Server Status", show_header=False)
+    table.add_column("Key", style="cyan")
+    table.add_column("Value")
+
+    table.add_row("Is Executing", "🔄 Yes" if result.get("is_executing") else "✅ No")
+    table.add_row("Current Directory", result.get("current_directory", "N/A"))
+    table.add_row("Last Command", result.get("last_command", "N/A")[:80])
+    table.add_row("Last Execution Time", f"{result.get('last_execution_time', 0):.2f}s")
+
+    console.print(table)
+
+    # Show recent history
+    history = result.get("recent_history", [])
+    if history:
+        console.print(f"\n[bold]📜 Recent Commands:[/bold]\n")
+        for i, cmd in enumerate(history[-5:]):
+            console.print(f"  [dim]{i+1}.[/dim] {cmd[:100]}{'...' if len(cmd) > 100 else ''}")
+
+
+@main.command()
+@click.option('--url', '-u', required=True, help='ColabMCP server URL')
+@click.option('--limit', '-l', default=20, help='Number of history entries to show')
+def history(url, limit):
+    """
+    Get command execution history from the remote server.
+
+    Example:
+        colabmcp history --url https://your-server.ngrok-free.app
+        colabmcp history --url https://your-server.ngrok-free.app --limit 50
+    """
+    print_banner()
+
+    console.print(f"[cyan]📜 Getting history from: {url}[/cyan]\n")
+
+    engine = RemoteExecutionEngine(url)
+    result = engine.get_history(limit=limit)
+
+    if "error" in result:
+        console.print(f"[red]❌ 获取历史失败: {result['error']}[/red]")
+        sys.exit(1)
+
+    history_entries = result.get("history", [])
+    if not history_entries:
+        console.print("[dim]No command history found.[/dim]")
+        return
+
+    console.print(f"[bold]Command History ({len(history_entries)} entries):[/bold]\n")
+
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("#", justify="right", width=4)
+    table.add_column("Time", width=10)
+    table.add_column("Directory", width=20)
+    table.add_column("Command Preview")
+
+    for i, entry in enumerate(history_entries):
+        timestamp = entry.get("timestamp", "")
+        if isinstance(timestamp, (int, float)):
+            from datetime import datetime
+            timestamp = datetime.fromtimestamp(timestamp).strftime("%H:%M:%S")
+        
+        directory = entry.get("directory", "")[-20:]
+        cmd_preview = entry.get("command", "")[:60]
+        if len(entry.get("command", "")) > 60:
+            cmd_preview += "..."
+
+        table.add_row(str(i + 1), str(timestamp), directory, cmd_preview)
+
+    console.print(table)
+
+
 if __name__ == '__main__':
     main()
