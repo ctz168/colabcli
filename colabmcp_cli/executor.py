@@ -458,34 +458,139 @@ class RemoteExecutionEngine(ExecutionEngine):
         Prepare code for remote execution.
 
         Convert magic commands to regular Python where possible.
+        Supports: %cd, %pwd, %env, %set_env, !cmd, %pip, %%writefile, %%bash
         """
+        import re
+
         lines = code.split('\n')
         prepared_lines = []
+        in_cell_magic = False
+        cell_magic_content = []
+        cell_magic_type = None
+        cell_magic_arg = None
 
-        for line in lines:
+        for i, line in enumerate(lines):
             stripped = line.strip()
 
-            # Handle pip install
-            if stripped.startswith('!pip install') or stripped.startswith('%pip install'):
-                # Convert to subprocess
-                packages = stripped.replace('!pip install', '').replace('%pip install', '').strip()
-                prepared_lines.append(f"import subprocess; subprocess.run(['pip', 'install'] + '{packages}'.split(), check=True)")
-            # Handle shell commands
+            # Handle cell magics (%%)
+            if stripped.startswith('%%'):
+                if in_cell_magic:
+                    # End previous cell magic
+                    prepared_lines.extend(self._process_cell_magic(cell_magic_type, cell_magic_arg, cell_magic_content))
+                    cell_magic_content = []
+
+                parts = stripped[2:].split(None, 1)
+                cell_magic_type = parts[0].lower() if parts else ''
+                cell_magic_arg = parts[1] if len(parts) > 1 else ''
+                in_cell_magic = True
+                continue
+
+            # Collect cell magic content
+            if in_cell_magic:
+                cell_magic_content.append(line)
+                continue
+
+            # Handle %cd - change directory
+            if stripped.startswith('%cd '):
+                dir_path = stripped[4:].strip()
+                # Remove quotes if present
+                dir_path = dir_path.strip('"\'')
+                prepared_lines.append(f'import os; os.chdir({repr(dir_path)}); print(f"📁 切换到目录: {{os.getcwd()}}")')
+            elif stripped == '%cd':
+                prepared_lines.append('import os; print(f"当前目录: {os.getcwd()}")')
+
+            # Handle %pwd - print working directory
+            elif stripped == '%pwd':
+                prepared_lines.append('import os; print(os.getcwd())')
+
+            # Handle %env - show environment variables
+            elif stripped == '%env':
+                prepared_lines.append('import os; [print(f"{k}={v}") for k, v in sorted(os.environ.items())]')
+            elif stripped.startswith('%env '):
+                var_name = stripped[5:].strip()
+                prepared_lines.append(f'import os; print(os.environ.get({repr(var_name)}, ""))')
+
+            # Handle %set_env - set environment variable
+            elif stripped.startswith('%set_env '):
+                match = re.match(r'%set_env\s+(\w+)\s*(.*)', stripped)
+                if match:
+                    var_name, var_value = match.groups()
+                    prepared_lines.append(f'import os; os.environ[{repr(var_name)}] = {repr(var_value)}; print(f"✅ 设置环境变量: {var_name}={var_value}")')
+
+            # Handle %pip install with full argument support
+            elif stripped.startswith('%pip install') or stripped.startswith('%pip uninstall'):
+                cmd_parts = stripped[5:].strip()  # Remove '%pip '
+                prepared_lines.append(f'import subprocess, sys; result = subprocess.run([sys.executable, "-m", "pip"] + {repr(cmd_parts.split())}, capture_output=False); print()')
+
+            # Handle !pip install with better support
+            elif stripped.startswith('!pip install') or stripped.startswith('!pip uninstall'):
+                cmd_parts = stripped[1:].strip()  # Remove '!'
+                prepared_lines.append(f'import subprocess, sys; result = subprocess.run([sys.executable, "-m", "pip"] + {repr(cmd_parts.split()[1:])}, capture_output=False); print()')
+
+            # Handle !shell_command with output capture
             elif stripped.startswith('!'):
                 cmd = stripped[1:].strip()
-                prepared_lines.append(f"import subprocess; subprocess.run({repr(cmd)}, shell=True)")
-            # Handle line magics - skip for now
+                prepared_lines.append(f'''import subprocess; result = subprocess.run({repr(cmd)}, shell=True, capture_output=True, text=True); print(result.stdout, end=''); result.stderr and print(result.stderr, end='')''')
+
+            # Handle other line magics
             elif stripped.startswith('%'):
-                if stripped.startswith('%%'):
-                    # Cell magic - keep as comment
-                    prepared_lines.append(f"# [Cell magic skipped]: {stripped}")
+                magic_match = re.match(r'%(\w+)\s*(.*)', stripped)
+                if magic_match:
+                    magic_name, magic_args = magic_match.groups()
+                    # Try to convert known magics
+                    if magic_name == 'time':
+                        # %time command - just run the code with timing
+                        prepared_lines.append(f'import time; _start = time.time(); {magic_args}; print(f"⏱️ 执行时间: {{time.time() - _start:.3f}}s")')
+                    elif magic_name == 'who':
+                        prepared_lines.append('print("Variables:", [k for k in dir() if not k.startswith("_")])')
+                    elif magic_name == 'reset':
+                        prepared_lines.append('print("⚠️ %reset 在远程执行中被跳过")')
+                    elif magic_name == 'load':
+                        prepared_lines.append(f'print("⚠️ %load 需要手动加载文件: {magic_args}")')
+                    else:
+                        prepared_lines.append(f'print("⚠️ 未知 magic command: %{magic_name}")')
                 else:
-                    # Line magic - skip
-                    prepared_lines.append(f"# [Magic skipped]: {stripped}")
+                    prepared_lines.append(f'# [Magic skipped]: {stripped}')
+
             else:
                 prepared_lines.append(line)
 
+        # Process any remaining cell magic content
+        if in_cell_magic and cell_magic_content:
+            prepared_lines.extend(self._process_cell_magic(cell_magic_type, cell_magic_arg, cell_magic_content))
+
         return '\n'.join(prepared_lines)
+
+    def _process_cell_magic(self, magic_type: str, magic_arg: str, content: List[str]) -> List[str]:
+        """Process cell magic content and return Python code lines."""
+        result = []
+
+        if magic_type == 'writefile':
+            filename = magic_arg.strip()
+            file_content = '\n'.join(content)
+            result.append(f'''import os; _dir = os.path.dirname({repr(filename)}); _dir and os.makedirs(_dir, exist_ok=True); open({repr(filename)}, 'w').write({repr(file_content)}); print(f"✅ 写入文件: {repr(filename)} ({len({repr(file_content)})} bytes)")''')
+
+        elif magic_type == 'bash':
+            bash_script = '\n'.join(content)
+            result.append(f'''import subprocess; result = subprocess.run({repr(bash_script)}, shell=True, capture_output=True, text=True); print(result.stdout, end=''); result.stderr and print(result.stderr, end='')''')
+
+        elif magic_type == 'html':
+            html_content = '\n'.join(content)
+            result.append(f'print({repr(html_content)})')
+
+        elif magic_type == 'javascript' or magic_type == 'js':
+            result.append('print("⚠️ JavaScript cell magic 在 Python 环境中不可用")')
+
+        elif magic_type == 'timeit':
+            code_to_time = '\n'.join(content)
+            result.append(f'''import timeit; _result = timeit.timeit({repr(code_to_time)}, number=100); print(f"⏱️ 平均执行时间: {{_result/100*1000:.3f}}ms (100次)")''')
+
+        else:
+            # Unknown cell magic - skip with warning
+            result.append(f'# [Cell magic {magic_type} skipped]: {magic_arg}')
+            result.extend([f'# {line}' for line in content])
+
+        return result
 
     def probe_environment(self) -> Dict[str, Any]:
         """Probe remote environment"""
