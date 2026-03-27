@@ -1,11 +1,44 @@
-# 🚀 ColabMCP CLI
+# 🚀 ColabCLI
 
-A powerful command-line tool to run Jupyter Notebooks (`.ipynb`) with **streaming output per cell**. Built as a CLI version of [colabmcp](https://github.com/ctz168/colabmcp).
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ctz168/colabcli/blob/main/colab_server.ipynb)
+[![GitHub](https://img.shields.io/badge/GitHub-ctz168%2Fcolabcli-blue?logo=github)](https://github.com/ctz168/colabcli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A powerful command-line tool to run Jupyter Notebooks (`.ipynb`) with **streaming output per cell**.
+
+## 🎯 Quick Start
+
+### 1. Deploy Server on Google Colab
+
+Click the badge below to open the server notebook in Colab:
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ctz168/colabcli/blob/main/colab_server.ipynb)
+
+Follow the instructions in the notebook to:
+1. Set your ngrok token
+2. Start the server
+3. Get the public URL
+
+### 2. Install CLI Locally
+
+```bash
+pip install git+https://github.com/ctz168/colabcli.git
+```
+
+### 3. Run Notebooks Remotely
+
+```bash
+# Check server health
+colabmcp health --url https://your-ngrok-url.ngrok-free.app
+
+# Run notebook remotely
+colabmcp remote notebook.ipynb --url https://your-ngrok-url.ngrok-free.app
+```
 
 ## ✨ Features
 
 - 📓 **Run Jupyter Notebooks locally** - Execute `.ipynb` files directly from CLI
-- 🌐 **Remote execution** - Run notebooks on ColabMCP servers (Google Colab / ModelScope)
+- 🌐 **Remote execution** - Run notebooks on Google Colab with GPU support
 - 📊 **Streaming output** - See each cell's output in real-time as it executes
 - 🔧 **IPython magic support** - Handle `%` and `!` commands locally
 - 🔄 **Variable persistence** - Variables persist between cells
@@ -16,10 +49,17 @@ A powerful command-line tool to run Jupyter Notebooks (`.ipynb`) with **streamin
 
 ## 📦 Installation
 
+### From GitHub
+
+```bash
+pip install git+https://github.com/ctz168/colabcli.git
+```
+
 ### From Source
 
 ```bash
-cd colabmcp-cli
+git clone https://github.com/ctz168/colabcli.git
+cd colabcli
 pip install -e .
 ```
 
@@ -29,7 +69,7 @@ pip install -e .
 pip install requests rich click ipython
 ```
 
-## 🚀 Quick Start
+## 🚀 Usage
 
 ### Run a Notebook Locally
 
@@ -39,16 +79,22 @@ colabmcp run notebook.ipynb
 
 # With options
 colabmcp run notebook.ipynb --start 5 --end 10 --verbose
+
+# Save output to JSON
+colabmcp run notebook.ipynb -o results.json
 ```
 
-### Run on Remote Server
+### Run on Remote Server (Google Colab)
 
 ```bash
-# Execute on ColabMCP server
-colabmcp remote notebook.ipynb --url https://your-server.modelscope.cn
+# Check server status
+colabmcp health --url https://your-ngrok-url.ngrok-free.app
 
-# With timeout
-colabmcp remote notebook.ipynb -u https://xxx.ngrok-free.app -t 600
+# Execute notebook remotely
+colabmcp remote notebook.ipynb --url https://your-ngrok-url.ngrok-free.app
+
+# With timeout (for long-running tasks)
+colabmcp remote train_model.ipynb -u https://your-server.ngrok-free.app -t 3600
 ```
 
 ### Other Commands
@@ -57,14 +103,11 @@ colabmcp remote notebook.ipynb -u https://xxx.ngrok-free.app -t 600
 # View notebook info
 colabmcp info notebook.ipynb
 
-# List cells
+# List and preview cells
 colabmcp cells notebook.ipynb
 
-# Convert to Python
+# Convert to Python script
 colabmcp convert notebook.ipynb -o script.py
-
-# Check server health
-colabmcp health --url https://your-server.modelscope.cn
 
 # Interactive REPL
 colabmcp repl
@@ -72,9 +115,17 @@ colabmcp repl
 
 ## 📖 Commands Reference
 
-### `colabmcp run`
+| Command | Description |
+|---------|-------------|
+| `colabmcp run` | Run notebook locally with streaming output |
+| `colabmcp remote` | Run notebook on remote ColabMCP server |
+| `colabmcp info` | Show notebook information |
+| `colabmcp cells` | List and preview cells |
+| `colabmcp convert` | Convert notebook to Python script |
+| `colabmcp health` | Check remote server health |
+| `colabmcp repl` | Start interactive Python REPL |
 
-Run a Jupyter Notebook locally with streaming output.
+### `colabmcp run`
 
 ```bash
 colabmcp run NOTEBOOK [OPTIONS]
@@ -89,14 +140,7 @@ Options:
   -o, --output PATH           Save output to JSON file
 ```
 
-**Example:**
-```bash
-colabmcp run analysis.ipynb --start 2 --end 8 -o results.json
-```
-
 ### `colabmcp remote`
-
-Run a Jupyter Notebook on a remote ColabMCP server.
 
 ```bash
 colabmcp remote NOTEBOOK --url URL [OPTIONS]
@@ -105,63 +149,49 @@ Options:
   -u, --url TEXT              ColabMCP server URL [required]
   -s, --start INTEGER         Start from cell index [default: 0]
   -e, --end INTEGER           End at cell index
-  --show-code / --no-show-code  Show code before execution
   --stop-on-error / --continue-on-error  [default: stop-on-error]
   -t, --timeout INTEGER       Timeout in seconds [default: 300]
   -V, --verbose               Verbose output
 ```
 
-**Example:**
-```bash
-colabmcp remote ml-training.ipynb -u https://colab-server.ngrok-free.app -t 600
+## 📝 Output Example
+
+### Console Output
+
+```
+━━━ Cell [0] ━━━
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ print("Hello, World!")                                                       │
+│ for i in range(3):                                                           │
+│     print(f"Count: {i}")                                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+⏳ Running...
+Hello, World!
+Count: 0
+Count: 1
+Count: 2
+✅ Done (45ms)
+
+━━━ Cell [1] ━━━
+...
 ```
 
-### `colabmcp convert`
+### JSON Output (with `-o` option)
 
-Convert a Jupyter Notebook to a Python script.
-
-```bash
-colabmcp convert NOTEBOOK [OPTIONS]
-
-Options:
-  -o, --output PATH           Output Python file
-```
-
-### `colabmcp info`
-
-Show information about a Jupyter Notebook.
-
-```bash
-colabmcp info NOTEBOOK
-```
-
-### `colabmcp cells`
-
-List and preview cells in a notebook.
-
-```bash
-colabmcp cells NOTEBOOK [OPTIONS]
-
-Options:
-  -s, --start INTEGER         Start from cell index [default: 0]
-  -e, --end INTEGER           End at cell index
-  -V, --verbose               Verbose output (show metadata)
-```
-
-### `colabmcp health`
-
-Check health of a ColabMCP server.
-
-```bash
-colabmcp health --url URL
-```
-
-### `colabmcp repl`
-
-Start an interactive Python REPL.
-
-```bash
-colabmcp repl
+```json
+{
+  "notebook": "analysis.ipynb",
+  "total_time": 2.345,
+  "results": [
+    {
+      "cell_index": 0,
+      "status": "success",
+      "stdout": "Hello, World!\nCount: 0\nCount: 1\nCount: 2\n",
+      "execution_time": 0.045,
+      "variables": ["data"]
+    }
+  ]
+}
 ```
 
 ## 🎯 Use Cases
@@ -182,10 +212,8 @@ colabmcp run report.ipynb -o report_output.json
 ### Remote GPU Computation
 
 ```bash
-# Check server
-colabmcp health --url https://your-colab.ngrok-free.app
-
-# Run GPU-intensive notebook
+# Deploy server on Colab (with GPU runtime)
+# Then run locally:
 colabmcp remote train_model.ipynb -u https://your-colab.ngrok-free.app -t 3600
 ```
 
@@ -198,8 +226,6 @@ colabmcp run tests.ipynb --continue-on-error -o test_results.json
 # Check exit code
 if [ $? -eq 0 ]; then
     echo "All tests passed!"
-else
-    echo "Some tests failed"
 fi
 ```
 
@@ -207,7 +233,7 @@ fi
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      ColabMCP CLI                           │
+│                      ColabCLI                               │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐   ┌─────────────┐   ┌─────────────────┐   │
 │  │   CLI       │   │  Notebook   │   │   Execution     │   │
@@ -229,51 +255,14 @@ fi
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## 📝 Output Format
+## 🤝 Integration with Google Colab
 
-### Console Output
+This CLI works seamlessly with Google Colab:
 
-```
-━━━ Cell [0] ━━━
-┌──────────────────────────────────────┐
-│ print("Hello, World!")               │
-│ for i in range(3):                   │
-│     print(f"Count: {i}")             │
-└──────────────────────────────────────┘
-⏳ Running...
-Hello, World!
-Count: 0
-Count: 1
-Count: 2
-✅ Done (45ms)
-```
-
-### JSON Output (with `-o` option)
-
-```json
-{
-  "notebook": "analysis.ipynb",
-  "total_time": 2.345,
-  "results": [
-    {
-      "cell_index": 0,
-      "status": "success",
-      "stdout": "Hello, World!\nCount: 0\nCount: 1\nCount: 2\n",
-      "stderr": "",
-      "execution_time": 0.045,
-      "variables": ["data"]
-    }
-  ]
-}
-```
-
-## 🤝 Integration with ColabMCP Server
-
-This CLI works seamlessly with the [ColabMCP server](https://github.com/ctz168/colabmcp):
-
-1. **Deploy the server** on Google Colab or ModelScope
-2. **Get the public URL** (ngrok or ModelScope URL)
-3. **Run notebooks remotely** using `colabmcp remote`
+1. **Open the server notebook** in Colab using the badge above
+2. **Set your ngrok token** ([get one free](https://dashboard.ngrok.com/get-started/your-authtoken))
+3. **Run all cells** to start the server
+4. **Copy the public URL** and use it with `colabmcp remote`
 
 ## 🔒 Security Notes
 
@@ -287,5 +276,5 @@ MIT License - See [LICENSE](LICENSE) file.
 
 ## 🙏 Credits
 
-- Based on [colabmcp](https://github.com/ctz168/colabmcp)
+- Original idea: [colabmcp](https://github.com/ctz168/colabmcp)
 - Built with [Click](https://click.palletsprojects.com/), [Rich](https://github.com/Textualize/rich), and [IPython](https://ipython.org/)
