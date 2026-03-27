@@ -147,117 +147,421 @@ colabmcp convert notebook.ipynb -o script.py
 colabmcp repl
 ```
 
+---
+
 ## 📖 Commands Reference
 
-| Command | Description |
-|---------|-------------|
-| `colabmcp run` | Run notebook locally with streaming output |
-| `colabmcp remote` | Run notebook on remote ColabMCP server (batch mode) |
-| `colabmcp stream` | 🆕 Run notebook with REAL-TIME SSE streaming output |
-| `colabmcp watch` | 🆕 Monitor server status in real-time |
-| `colabmcp health` | Check remote server health and environment |
-| `colabmcp status` | Get current execution status and directory |
-| `colabmcp interrupt` | Interrupt current execution (keeps server running) |
-| `colabmcp history` | View command execution history |
-| `colabmcp info` | Show notebook information |
-| `colabmcp cells` | List and preview cells |
-| `colabmcp convert` | Convert notebook to Python script |
-| `colabmcp repl` | Start interactive Python REPL |
+### 命令概览
 
-### `colabmcp run`
+| 命令 | 描述 | 用途 |
+|------|------|------|
+| `colabmcp run` | 本地执行 notebook | 快速测试、本地开发 |
+| `colabmcp remote` | 远程批量执行 | 短时间任务、数据处理 |
+| `colabmcp stream` | 🆕 远程流式执行 | 长时间任务、Bot、训练 |
+| `colabmcp watch` | 🆕 监控服务器状态 | 查看远程执行进度 |
+| `colabmcp health` | 检查服务器健康状态 | 验证连接 |
+| `colabmcp status` | 获取执行状态 | 查看当前目录和状态 |
+| `colabmcp interrupt` | 中断当前执行 | 停止运行中的代码 |
+| `colabmcp history` | 查看命令历史 | 调试、回溯 |
+| `colabmcp info` | 查看 notebook 信息 | 了解 notebook 结构 |
+| `colabmcp cells` | 列出 cell 内容 | 预览代码 |
+| `colabmcp convert` | 转换为 Python 脚本 | 导出代码 |
+| `colabmcp repl` | 交互式 Python REPL | 本地测试 |
+
+---
+
+### `colabmcp run` - 本地执行
+
+在本地执行 Jupyter Notebook，支持实时输出。
 
 ```bash
 colabmcp run NOTEBOOK [OPTIONS]
-
-Options:
-  -s, --start INTEGER         Start from cell index [default: 0]
-  -e, --end INTEGER           End at cell index
-  --show-code / --no-show-code  Show code before execution [default: True]
-  --show-markdown             Show markdown cells
-  --stop-on-error / --continue-on-error  [default: stop-on-error]
-  -V, --verbose               Verbose output
-  -o, --output PATH           Save output to JSON file
 ```
 
-### `colabmcp remote`
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--start` | `-s` | 0 | 起始 cell 索引（从哪个 cell 开始执行） |
+| `--end` | `-e` | 最后一个 | 结束 cell 索引（不包含该索引，类似 Python slice） |
+| `--show-code` | - | True | 执行前显示代码 |
+| `--show-markdown` | - | False | 显示 markdown cell |
+| `--stop-on-error` | - | True | 遇到错误时停止 |
+| `--continue-on-error` | - | False | 遇到错误时继续 |
+| `--verbose` | `-V` | False | 详细输出 |
+| `--output` | `-o` | - | 保存结果到 JSON 文件 |
+
+**示例：**
+
+```bash
+# 执行整个 notebook
+colabmcp run notebook.ipynb
+
+# 只执行 cell 5 到 cell 9（不包含 cell 10）
+colabmcp run notebook.ipynb --start 5 --end 10
+
+# 执行从 cell 3 开始到结尾
+colabmcp run notebook.ipynb -s 3
+
+# 只执行 cell 0（第一个 cell）
+colabmcp run notebook.ipynb --end 1
+
+# 错误时继续执行
+colabmcp run notebook.ipynb --continue-on-error
+
+# 保存执行结果
+colabmcp run notebook.ipynb -o results.json
+```
+
+---
+
+### `colabmcp remote` - 远程批量执行
+
+在远程服务器上执行 notebook，等待所有 cell 完成后返回结果。
 
 ```bash
 colabmcp remote NOTEBOOK --url URL [OPTIONS]
-
-Options:
-  -u, --url TEXT              ColabMCP server URL [required]
-  -s, --start INTEGER         Start from cell index [default: 0]
-  -e, --end INTEGER           End at cell index
-  --stop-on-error / --continue-on-error  [default: stop-on-error]
-  -t, --timeout INTEGER       Timeout in seconds [default: 300]
-  -V, --verbose               Verbose output
 ```
 
-### `colabmcp stream` 🆕
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 必需 | 说明 |
+|------|------|--------|------|------|
+| `--url` | `-u` | - | ✅ | ColabMCP 服务器 URL |
+| `--start` | `-s` | 0 | - | 起始 cell 索引 |
+| `--end` | `-e` | 最后一个 | - | 结束 cell 索引（不包含） |
+| `--stop-on-error` | - | True | - | 遇到错误时停止 |
+| `--continue-on-error` | - | False | - | 遇到错误时继续 |
+| `--timeout` | `-t` | 300 | - | 超时时间（秒） |
+| `--verbose` | `-V` | False | - | 详细输出 |
+
+**示例：**
+
+```bash
+# 基本远程执行
+colabmcp remote notebook.ipynb -u https://xxx.ngrok-free.app
+
+# 执行特定 cell（cell 3 到 cell 7）
+colabmcp remote notebook.ipynb -u https://xxx.ngrok-free.app --start 3 --end 8
+
+# 只执行第 4 个 cell（索引为 3）
+colabmcp remote notebook.ipynb -u https://xxx.ngrok-free.app -s 3 -e 4
+
+# 长时间任务（设置 1 小时超时）
+colabmcp remote train.ipynb -u https://xxx.ngrok-free.app -t 3600
+
+# 详细模式（显示每个 cell 的代码）
+colabmcp remote notebook.ipynb -u https://xxx.ngrok-free.app -V
+```
+
+---
+
+### `colabmcp stream` 🆕 - 远程流式执行
+
+使用 SSE (Server-Sent Events) 实时推送输出，**适合长时间运行的任务**。
 
 ```bash
 colabmcp stream NOTEBOOK --url URL [OPTIONS]
-
-Options:
-  -u, --url TEXT              ColabMCP server URL [required]
-  -s, --start INTEGER         Start from cell index [default: 0]
-  -e, --end INTEGER           End at cell index (exclusive)
-  -t, --timeout INTEGER       Timeout in seconds [default: 600]
-  -V, --verbose               Verbose output (show code)
-
-# Stream bot execution
-colabmcp stream bot.ipynb -u https://your-server.ngrok-free.app
-
-# Stream specific cell with verbose output
-colabmcp stream train.ipynb -u https://your-server.ngrok-free.app --start 5 --end 6 -V
 ```
 
-### `colabmcp watch` 🆕
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 必需 | 说明 |
+|------|------|--------|------|------|
+| `--url` | `-u` | - | ✅ | ColabMCP 服务器 URL |
+| `--start` | `-s` | 0 | - | 起始 cell 索引 |
+| `--end` | `-e` | 最后一个 | - | 结束 cell 索引（不包含） |
+| `--timeout` | `-t` | 600 | - | 流式超时时间（秒） |
+| `--verbose` | `-V` | False | - | 显示代码 |
+
+**使用场景：**
+- 🤖 运行 Telegram/Discord Bot
+- 🧠 模型训练（实时查看进度）
+- 📊 数据处理（查看中间输出）
+- 🔄 持续运行的监控脚本
+
+**示例：**
+
+```bash
+# 流式执行整个 notebook
+colabmcp stream bot.ipynb -u https://xxx.ngrok-free.app
+
+# 只执行 Bot 启动的 cell（假设是 cell 4）
+colabmcp stream bot.ipynb -u https://xxx.ngrok-free.app -s 4 -e 5
+
+# 执行 cell 3 到 cell 5（跳过前面的安装和环境设置）
+colabmcp stream bot.ipynb -u https://xxx.ngrok-free.app --start 3 --end 6
+
+# 详细模式（显示代码和输出）
+colabmcp stream bot.ipynb -u https://xxx.ngrok-free.app -V
+
+# 长时间运行（设置 2 小时超时）
+colabmcp stream bot.ipynb -u https://xxx.ngrok-free.app -t 7200
+```
+
+**中断执行：** 按 `Ctrl+C` 可中断执行，服务器保持运行。
+
+---
+
+### `colabmcp watch` 🆕 - 服务器监控
+
+实时监控远程服务器的状态。
 
 ```bash
 colabmcp watch --url URL [OPTIONS]
-
-Options:
-  -d, --duration INTEGER      Duration to watch in seconds [default: 300]
-                             Use 0 for infinite watching
-
-# Watch server for 5 minutes
-colabmcp watch -u https://your-server.ngrok-free.app
-
-# Watch indefinitely
-colabmcp watch -u https://your-server.ngrok-free.app -d 0
 ```
 
-### `colabmcp interrupt`
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--url` | `-u` | - (必需) | ColabMCP 服务器 URL |
+| `--duration` | `-d` | 300 | 监控时长（秒），设为 0 无限监控 |
+
+**示例：**
+
+```bash
+# 监控 5 分钟
+colabmcp watch -u https://xxx.ngrok-free.app
+
+# 无限监控（按 Ctrl+C 退出）
+colabmcp watch -u https://xxx.ngrok-free.app -d 0
+
+# 监控 1 小时
+colabmcp watch -u https://xxx.ngrok-free.app -d 3600
+```
+
+---
+
+### `colabmcp interrupt` - 中断执行
+
+中断远程服务器上正在执行的代码，**不会停止服务器本身**。
 
 ```bash
 colabmcp interrupt --url URL
-
-# Interrupt the current execution without stopping the server
-colabmcp interrupt -u https://your-server.ngrok-free.app
 ```
 
-### `colabmcp status`
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--url` | `-u` | - (必需) | ColabMCP 服务器 URL |
+
+**使用场景：**
+- Bot 运行时想要停止，但不想重新启动服务器
+- 训练过程中发现参数错误，需要中断
+- 死循环代码需要强制停止
+
+**示例：**
+
+```bash
+# 中断当前执行
+colabmcp interrupt -u https://xxx.ngrok-free.app
+
+# 简写形式
+colabmcp interrupt --url https://xxx.ngrok-free.app
+```
+
+**注意：** 中断后可以继续发送新的执行命令，服务器保持运行。
+
+---
+
+### `colabmcp status` - 获取执行状态
+
+查看远程服务器的当前状态。
 
 ```bash
 colabmcp status --url URL
-
-# Get current directory, execution status, and recent commands
-colabmcp status -u https://your-server.ngrok-free.app
 ```
 
-### `colabmcp history`
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--url` | `-u` | - (必需) | ColabMCP 服务器 URL |
+
+**返回信息：**
+- `is_executing` - 是否正在执行代码
+- `current_directory` - 当前工作目录
+- `last_command` - 最后执行的命令
+- `last_execution_time` - 最后执行耗时
+- `recent_history` - 最近 5 条命令
+
+**示例：**
+
+```bash
+colabmcp status -u https://xxx.ngrok-free.app
+```
+
+---
+
+### `colabmcp history` - 查看命令历史
+
+查看远程服务器上的命令执行历史。
 
 ```bash
 colabmcp history --url URL [OPTIONS]
-
-Options:
-  -l, --limit INTEGER         Number of entries to show [default: 20]
-
-# View command execution history
-colabmcp history -u https://your-server.ngrok-free.app
-colabmcp history -u https://your-server.ngrok-free.app --limit 50
 ```
+
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--url` | `-u` | - (必需) | ColabMCP 服务器 URL |
+| `--limit` | `-l` | 20 | 显示的历史条数 |
+
+**示例：**
+
+```bash
+# 查看最近 20 条历史
+colabmcp history -u https://xxx.ngrok-free.app
+
+# 查看最近 50 条历史
+colabmcp history -u https://xxx.ngrok-free.app -l 50
+```
+
+---
+
+### `colabmcp health` - 健康检查
+
+检查远程服务器的健康状态。
+
+```bash
+colabmcp health --url URL
+```
+
+**返回信息：**
+- 服务器状态和运行时间
+- 内存使用情况
+- GPU 可用性
+- 当前工作目录
+
+**示例：**
+
+```bash
+colabmcp health -u https://xxx.ngrok-free.app
+```
+
+---
+
+### `colabmcp cells` - 列出 Cell
+
+列出 notebook 中的 cell 内容，用于预览代码。
+
+```bash
+colabmcp cells NOTEBOOK [OPTIONS]
+```
+
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--start` | `-s` | 0 | 起始 cell 索引 |
+| `--end` | `-e` | 最后一个 | 结束 cell 索引（不包含） |
+| `--verbose` | `-V` | False | 显示元数据 |
+
+**示例：**
+
+```bash
+# 查看所有 cell
+colabmcp cells notebook.ipynb
+
+# 查看 cell 3 到 cell 7
+colabmcp cells notebook.ipynb -s 3 -e 8
+
+# 查看第一个 cell
+colabmcp cells notebook.ipynb -e 1
+```
+
+---
+
+### `colabmcp info` - Notebook 信息
+
+显示 notebook 的基本信息。
+
+```bash
+colabmcp info NOTEBOOK
+```
+
+**返回信息：**
+- 文件路径和格式版本
+- 总 cell 数量（代码 cell 和 markdown cell）
+- 内核信息
+- Cell 概览表格
+
+---
+
+### `colabmcp convert` - 转换为 Python
+
+将 notebook 转换为 Python 脚本。
+
+```bash
+colabmcp convert NOTEBOOK [OPTIONS]
+```
+
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--output` | `-o` | notebook同名.py | 输出文件路径 |
+
+**示例：**
+
+```bash
+# 转换（输出到同名 .py 文件）
+colabmcp convert notebook.ipynb
+
+# 指定输出文件
+colabmcp convert notebook.ipynb -o script.py
+```
+
+---
+
+## 🔧 Cell 索引详解
+
+### 索引规则
+
+Cell 索引从 **0** 开始，`--end` 参数是**不包含**的（类似 Python 的 slice）。
+
+```
+Notebook 结构:
+Cell 0: # 导入库        ← Markdown
+Cell 1: import numpy    ← 代码
+Cell 2: # 数据加载      ← Markdown  
+Cell 3: load_data()     ← 代码
+Cell 4: # 模型训练      ← Markdown
+Cell 5: train_model()   ← 代码
+```
+
+### 执行范围示例
+
+| 命令 | 执行的 Cell | 说明 |
+|------|-------------|------|
+| `-s 0 -e 6` 或省略 | 1, 3, 5 | 全部代码 cell（跳过 markdown） |
+| `-s 3 -e 6` | 3, 5 | 从 cell 3 开始 |
+| `-s 5 -e 6` | 5 | 只执行 cell 5 |
+| `-s 1 -e 4` | 1, 3 | 执行 cell 1 和 3 |
+| `-s 3` | 3, 5 | 从 cell 3 到结尾 |
+| `-e 3` | 1 | 只执行第一个代码 cell |
+
+### 常用场景
+
+```bash
+# 场景 1: 跳过安装和环境设置，直接运行核心逻辑
+colabmcp stream bot.ipynb -u $URL --start 4
+
+# 场景 2: 只运行某个特定 cell（假设是 cell 3）
+colabmcp remote notebook.ipynb -u $URL -s 3 -e 4
+
+# 场景 3: 调试某个范围的问题
+colabmcp run notebook.ipynb --start 5 --end 8 -V
+
+# 场景 4: 先预览再执行
+colabmcp cells notebook.ipynb -s 4 -e 6
+colabmcp stream notebook.ipynb -u $URL -s 4 -e 6
+```
+
+---
 
 ## 🔧 Supported IPython Magic Commands
 
