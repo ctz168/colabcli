@@ -782,31 +782,31 @@ class RemoteExecutionEngine(ExecutionEngine):
 
         try:
             # Use SSE endpoint for streaming
-            import sseclient
-            
             response = self.session.post(
                 f"{self.base_url}/execute_stream",
                 json={"code": code, "timeout": self.timeout},
                 stream=True,
-                timeout=self.timeout + 60
+                timeout=self.timeout + 60,
+                headers={'Accept': 'text/event-stream', 'Cache-Control': 'no-cache'}
             )
             response.raise_for_status()
             
-            # Parse SSE events
-            client = sseclient.SSEClient(response)
-            for event in client.events():
-                if event.data:
-                    try:
-                        msg = json.loads(event.data)
-                        if on_output:
-                            on_output(msg)
-                        yield msg
-                    except json.JSONDecodeError:
-                        yield {"type": "raw", "content": event.data}
+            # Parse SSE events manually (more reliable than sseclient)
+            for line in response.iter_lines(decode_unicode=True):
+                if line:
+                    if line.startswith('data: '):
+                        data_str = line[6:]  # Remove 'data: ' prefix
+                        try:
+                            msg = json.loads(data_str)
+                            if on_output:
+                                on_output(msg)
+                            yield msg
+                        except json.JSONDecodeError:
+                            yield {"type": "raw", "content": data_str}
+                    elif line.startswith(':'):
+                        # Heartbeat comment, ignore
+                        pass
                         
-        except ImportError:
-            # Fallback if sseclient not available - use manual parsing
-            yield from self._execute_streaming_manual(code, cell.index, on_output)
         except Exception as e:
             yield {"type": "error", "content": str(e), "error_type": type(e).__name__}
 
