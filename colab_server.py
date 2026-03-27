@@ -8,6 +8,8 @@ import gc
 import threading
 import signal
 import ctypes
+import queue
+import re
 from datetime import datetime
 from flask import Flask, request, jsonify, Response
 import psutil
@@ -32,6 +34,10 @@ execution_state = {
 # 当前执行的线程引用
 current_execution_thread = None
 interrupt_requested = False
+
+# 流式输出队列
+stream_output_queue = None
+stream_active = False
 
 # 创建 Flask 应用
 app = Flask(__name__)
@@ -113,12 +119,12 @@ def _interrupt_thread(thread):
 def index():
     return jsonify({
         "name": "ColabCLI Server",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "status": "running",
         "uptime_minutes": round((time.time() - start_time) / 60, 2),
         "current_directory": execution_state["current_directory"],
         "is_executing": execution_state["is_executing"],
-        "endpoints": ["/health", "/probe", "/execute", "/interrupt", "/status", "/history", "/variables", "/files", "/cleanup"]
+        "endpoints": ["/health", "/probe", "/execute", "/execute_stream", "/interrupt", "/status", "/history", "/variables", "/files", "/cleanup"]
     })
 
 @app.route('/health', methods=['GET'])
@@ -320,6 +326,206 @@ def execute_code():
         execution_lock.release()
         current_execution_thread = None
 
+@app.route('/execute_stream', methods=['POST'])
+def execute_code_stream():
+    """
+    流式执行代码 - 使用 SSE 实时推送输出。
+    支持：
+    1. shell 命令 (!cmd) - 使用 Popen 实时读取
+    2. Python 代码 - 使用线程实时推送 stdout
+    """
+    global stream_output_queue, stream_active, interrupt_requested
+
+    def generate_sse(output_queue):
+        """SSE 生成器"""
+        try:
+            while True:
+                try:
+                    msg = output_queue.get(timeout=0.5)
+                    if msg is None:  # 结束信号
+                        break
+                    yield f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
+                except queue.Empty:
+                    # 发送心跳保持连接
+                    yield f": heartbeat\n\n"
+                    continue
+        except GeneratorExit:
+            pass
+
+    # 创建输出队列
+    stream_output_queue = queue.Queue()
+    stream_active = True
+    interrupt_requested = False
+
+    data = request.get_json()
+    code = data.get('code', '')
+    timeout = min(data.get('timeout', 300), 600)
+
+    if not code:
+        stream_output_queue.put({"type": "error", "content": "No code provided"})
+        stream_output_queue.put(None)
+        return Response(generate_sse(stream_output_queue), mimetype='text/event-stream')
+
+    execution_state["is_executing"] = True
+    execution_state["last_command"] = code[:200] + "..." if len(code) > 200 else code
+
+    # 检测是否是 shell 命令
+    stripped_code = code.strip()
+
+    # 情况1: 单独的 shell 命令 (以 ! 开头)
+    shell_match = re.match(r'^import subprocess; result = subprocess\.run\([\'"](.+?)[\'"], shell=True', stripped_code)
+    if shell_match:
+        shell_cmd = shell_match.group(1)
+
+        def run_shell_command():
+            global stream_active
+            start_time = time.time()
+            stream_output_queue.put({"type": "status", "content": f"执行: {shell_cmd}"})
+
+            try:
+                process = subprocess.Popen(
+                    shell_cmd,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,  # 行缓冲
+                    cwd=execution_state["current_directory"]
+                )
+
+                # 实时读取输出
+                import select
+                while True:
+                    if interrupt_requested:
+                        process.terminate()
+                        stream_output_queue.put({"type": "error", "content": "执行被用户中断"})
+                        break
+
+                    # 检查进程是否结束
+                    retcode = process.poll()
+                    read_ready, _, _ = select.select([process.stdout, process.stderr], [], [], 0.1)
+
+                    for stream in read_ready:
+                        if stream == process.stdout:
+                            line = process.stdout.readline()
+                            if line:
+                                stream_output_queue.put({"type": "stdout", "content": line})
+                        elif stream == process.stderr:
+                            line = process.stderr.readline()
+                            if line:
+                                stream_output_queue.put({"type": "stderr", "content": line})
+
+                    if retcode is not None:
+                        # 读取剩余输出
+                        remaining_stdout, remaining_stderr = process.communicate()
+                        if remaining_stdout:
+                            stream_output_queue.put({"type": "stdout", "content": remaining_stdout})
+                        if remaining_stderr:
+                            stream_output_queue.put({"type": "stderr", "content": remaining_stderr})
+                        break
+
+                elapsed = time.time() - start_time
+                stream_output_queue.put({
+                    "type": "complete",
+                    "content": f"✅ 完成 (退出码: {process.returncode}, 耗时: {elapsed:.2f}s)"
+                })
+                _add_to_history(code, f"shell: {shell_cmd}", success=True)
+                execution_state["last_execution_time"] = elapsed
+
+            except Exception as e:
+                stream_output_queue.put({"type": "error", "content": str(e)})
+                _add_to_history(code, str(e), success=False)
+            finally:
+                stream_output_queue.put(None)  # 结束信号
+                stream_active = False
+                execution_state["is_executing"] = False
+
+        thread = threading.Thread(target=run_shell_command, daemon=True)
+        thread.start()
+
+    # 情况2: Python 代码执行
+    else:
+        class StreamingOutput:
+            """流式输出捕获器"""
+            def __init__(self, q, stream_type):
+                self.queue = q
+                self.stream_type = stream_type
+                self.buffer = []
+
+            def write(self, text):
+                if text:
+                    self.buffer.append(text)
+                    self.queue.put({"type": self.stream_type, "content": text})
+
+            def flush(self):
+                pass
+
+            def getvalue(self):
+                return ''.join(self.buffer)
+
+        def run_python_code():
+            global stream_active
+            start_time = time.time()
+            stream_output_queue.put({"type": "status", "content": "执行 Python 代码..."})
+
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            stdout_capture = StreamingOutput(stream_output_queue, 'stdout')
+            stderr_capture = StreamingOutput(stream_output_queue, 'stderr')
+            sys.stdout = stdout_capture
+            sys.stderr = stderr_capture
+
+            exec_globals = {'__builtins__': __builtins__, **runtime_variables}
+            exec_locals = {}
+
+            try:
+                if interrupt_requested:
+                    raise KeyboardInterrupt("执行被用户中断")
+
+                exec(code, exec_globals, exec_locals)
+
+                if interrupt_requested:
+                    raise KeyboardInterrupt("执行被用户中断")
+
+                # 保存变量
+                for key, value in exec_locals.items():
+                    if not key.startswith('_'):
+                        try:
+                            runtime_variables[key] = value
+                        except:
+                            pass
+
+                _update_directory_from_code(code)
+                elapsed = time.time() - start_time
+                stream_output_queue.put({
+                    "type": "complete",
+                    "content": f"✅ 完成 (耗时: {elapsed:.2f}s)",
+                    "variables": list(exec_locals.keys())
+                })
+                _add_to_history(code, ''.join(stdout_capture.buffer)[:200], success=True)
+                execution_state["last_execution_time"] = elapsed
+
+            except KeyboardInterrupt:
+                stream_output_queue.put({"type": "error", "content": "⚠️ 执行被用户中断"})
+                _add_to_history(code, "中断", success=False)
+            except Exception as e:
+                stream_output_queue.put({
+                    "type": "error",
+                    "content": f"❌ 错误: {type(e).__name__}: {str(e)}"
+                })
+                _add_to_history(code, str(e), success=False)
+            finally:
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
+                stream_output_queue.put(None)  # 结束信号
+                stream_active = False
+                execution_state["is_executing"] = False
+
+        thread = threading.Thread(target=run_python_code, daemon=True)
+        thread.start()
+
+    return Response(generate_sse(stream_output_queue), mimetype='text/event-stream')
+
 @app.route('/variables', methods=['GET'])
 def list_variables():
     vars_info = {}
@@ -403,8 +609,9 @@ if __name__ == '__main__':
     print("\n" + "="*60)
     print("🚀 ColabCLI 服务器启动中...")
     print("="*60)
-    print("版本: 2.0.0")
-    print("功能: 心跳保活 + 错误隔离 + 中断支持 + 状态跟踪")
+    print("版本: 2.1.0")
+    print("功能: 心跳保活 + 错误隔离 + 中断支持 + 状态跟踪 + 流式输出")
+    print("新增: /execute_stream 端点支持 SSE 实时流式输出")
     print("="*60 + "\n")
 
     heartbeat = threading.Thread(target=heartbeat_thread, daemon=True)

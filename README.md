@@ -3,8 +3,9 @@
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ctz168/colabcli/blob/main/colab_server.ipynb)
 [![GitHub](https://img.shields.io/badge/GitHub-ctz168%2Fcolabcli-blue?logo=github)](https://github.com/ctz168/colabcli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-2.1.0-green.svg)](https://github.com/ctz168/colabcli)
 
-A powerful command-line tool to run Jupyter Notebooks (`.ipynb`) with **streaming output per cell**.
+A powerful command-line tool to run Jupyter Notebooks (`.ipynb`) with **streaming output per cell** and **real-time SSE streaming** for long-running tasks.
 
 ## 🎯 Quick Start
 
@@ -31,12 +32,16 @@ pip install git+https://github.com/ctz168/colabcli.git
 # Check server health
 colabmcp health --url https://your-ngrok-url.ngrok-free.app
 
-# Run notebook remotely
+# Run notebook remotely (batch mode)
 colabmcp remote notebook.ipynb --url https://your-ngrok-url.ngrok-free.app
+
+# Run notebook with REAL-TIME streaming output (NEW!)
+colabmcp stream notebook.ipynb --url https://your-ngrok-url.ngrok-free.app
 ```
 
 ## ✨ Features
 
+### Core Features
 - 📓 **Run Jupyter Notebooks locally** - Execute `.ipynb` files directly from CLI
 - 🌐 **Remote execution** - Run notebooks on Google Colab with GPU support
 - 📊 **Streaming output** - See each cell's output in real-time as it executes
@@ -44,10 +49,16 @@ colabmcp remote notebook.ipynb --url https://your-ngrok-url.ngrok-free.app
 - 🔄 **Variable persistence** - Variables persist between cells
 - ⏱️ **Execution timing** - Track execution time for each cell
 - 🛑 **Error handling** - Stop on error or continue execution
+
+### v2.1.0 New Features 🆕
+- 🌊 **Real-time SSE Streaming** - Live output for long-running tasks (bots, training, etc.)
+- 👀 **Watch Mode** - Monitor server status in real-time
 - ⏹️ **Interrupt execution** - Stop long-running code without killing the server
 - 📊 **Status tracking** - Know current directory, running status, command history
 - 📜 **Command history** - View past executions and their results
 - 🚫 **Duplicate detection** - Skip redundant `cd` commands automatically
+
+### Other Features
 - 📝 **Notebook conversion** - Convert `.ipynb` to `.py` scripts
 - 🔍 **Notebook inspection** - View notebook structure and metadata
 
@@ -94,12 +105,31 @@ colabmcp run notebook.ipynb -o results.json
 # Check server status
 colabmcp health --url https://your-ngrok-url.ngrok-free.app
 
-# Execute notebook remotely
+# Execute notebook remotely (batch mode - waits for completion)
 colabmcp remote notebook.ipynb --url https://your-ngrok-url.ngrok-free.app
 
 # With timeout (for long-running tasks)
 colabmcp remote train_model.ipynb -u https://your-server.ngrok-free.app -t 3600
 ```
+
+### 🆕 Real-Time Streaming (v2.1.0)
+
+Perfect for long-running tasks like training, bots, or continuous processes:
+
+```bash
+# Stream notebook output in REAL-TIME
+colabmcp stream notebook.ipynb -u https://your-server.ngrok-free.app
+
+# Stream specific cells only
+colabmcp stream bot.ipynb -u https://your-server.ngrok-free.app --start 3 --end 4
+
+# Watch server status in real-time
+colabmcp watch -u https://your-server.ngrok-free.app -d 300
+```
+
+**When to use `stream` vs `remote`:**
+- Use `remote` for short tasks (data processing, quick scripts)
+- Use `stream` for long-running tasks (training, bots, servers)
 
 ### Other Commands
 
@@ -122,7 +152,9 @@ colabmcp repl
 | Command | Description |
 |---------|-------------|
 | `colabmcp run` | Run notebook locally with streaming output |
-| `colabmcp remote` | Run notebook on remote ColabMCP server |
+| `colabmcp remote` | Run notebook on remote ColabMCP server (batch mode) |
+| `colabmcp stream` | 🆕 Run notebook with REAL-TIME SSE streaming output |
+| `colabmcp watch` | 🆕 Monitor server status in real-time |
 | `colabmcp health` | Check remote server health and environment |
 | `colabmcp status` | Get current execution status and directory |
 | `colabmcp interrupt` | Interrupt current execution (keeps server running) |
@@ -159,6 +191,41 @@ Options:
   --stop-on-error / --continue-on-error  [default: stop-on-error]
   -t, --timeout INTEGER       Timeout in seconds [default: 300]
   -V, --verbose               Verbose output
+```
+
+### `colabmcp stream` 🆕
+
+```bash
+colabmcp stream NOTEBOOK --url URL [OPTIONS]
+
+Options:
+  -u, --url TEXT              ColabMCP server URL [required]
+  -s, --start INTEGER         Start from cell index [default: 0]
+  -e, --end INTEGER           End at cell index (exclusive)
+  -t, --timeout INTEGER       Timeout in seconds [default: 600]
+  -V, --verbose               Verbose output (show code)
+
+# Stream bot execution
+colabmcp stream bot.ipynb -u https://your-server.ngrok-free.app
+
+# Stream specific cell with verbose output
+colabmcp stream train.ipynb -u https://your-server.ngrok-free.app --start 5 --end 6 -V
+```
+
+### `colabmcp watch` 🆕
+
+```bash
+colabmcp watch --url URL [OPTIONS]
+
+Options:
+  -d, --duration INTEGER      Duration to watch in seconds [default: 300]
+                             Use 0 for infinite watching
+
+# Watch server for 5 minutes
+colabmcp watch -u https://your-server.ngrok-free.app
+
+# Watch indefinitely
+colabmcp watch -u https://your-server.ngrok-free.app -d 0
 ```
 
 ### `colabmcp interrupt`
@@ -229,6 +296,28 @@ Count: 2
 ...
 ```
 
+### Streaming Output (v2.1.0)
+
+```
+━━━ Cell [3] ━━━
+⏳ Streaming...
+📌 执行: python main.py --mode telegram
+[Bot] Token: 7983263905:AAFs...
+[Bot] 启动中...
+按 Ctrl+C 停止 Bot
+============================================================
+[心跳] 14:32:15 - 服务运行中 | 目录: /content/stdpbrain
+[Bot] 收到消息: 你好
+[Bot] 回复: 你好！我是类人脑AI...
+[心跳] 14:32:45 - 服务运行中 | 目录: /content/stdpbrain
+...
+⏹️ Execution interrupted by user
+
+📊 Streaming Summary:
+Total Time      5m 32.1s
+Output Lines    127
+```
+
 ### JSON Output (with `-o` option)
 
 ```json
@@ -270,6 +359,16 @@ colabmcp run report.ipynb -o report_output.json
 colabmcp remote train_model.ipynb -u https://your-colab.ngrok-free.app -t 3600
 ```
 
+### 🆕 Long-Running Bot/Server
+
+```bash
+# Stream bot output in real-time
+colabmcp stream telegram_bot.ipynb -u https://your-colab.ngrok-free.app --start 3
+
+# Watch server while bot runs
+colabmcp watch -u https://your-colab.ngrok-free.app -d 0
+```
+
 ### CI/CD Integration
 
 ```bash
@@ -286,7 +385,7 @@ fi
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      ColabCLI                               │
+│                      ColabCLI v2.1.0                        │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐   ┌─────────────┐   ┌─────────────────┐   │
 │  │   CLI       │   │  Notebook   │   │   Execution     │   │
@@ -303,7 +402,7 @@ fi
 │                          ▼                  ▼             │ │
 │                   ┌─────────────────────────────────────┐ │ │
 │                   │      Streaming Output Display       │ │ │
-│                   │           (rich console)            │ │ │
+│                   │    (rich console + SSE support)     │ │ │
 │                   └─────────────────────────────────────┘ │ │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -315,7 +414,28 @@ This CLI works seamlessly with Google Colab:
 1. **Open the server notebook** in Colab using the badge above
 2. **Set your ngrok token** ([get one free](https://dashboard.ngrok.com/get-started/your-authtoken))
 3. **Run all cells** to start the server
-4. **Copy the public URL** and use it with `colabmcp remote`
+4. **Copy the public URL** and use it with `colabmcp remote` or `colabmcp stream`
+
+## 📋 Changelog
+
+### v2.1.0 (Latest)
+- 🆕 Added `/execute_stream` SSE endpoint for real-time output
+- 🆕 Added `colabmcp stream` command for streaming execution
+- 🆕 Added `colabmcp watch` command for server monitoring
+- ✨ Improved interrupt handling for streaming tasks
+- 🐛 Fixed shell command output streaming
+
+### v2.0.0
+- 🆕 Added `/interrupt` endpoint - stop code without killing server
+- 🆕 Added `/status` endpoint - track current directory and execution state
+- 🆕 Added `/history` endpoint - view command execution history
+- ✨ Smart duplicate detection for `cd` commands
+
+### v1.0.0
+- Initial release
+- Basic notebook execution (local and remote)
+- IPython magic command support
+- Streaming output per cell
 
 ## 🔒 Security Notes
 

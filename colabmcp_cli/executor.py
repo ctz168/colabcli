@@ -380,29 +380,6 @@ class RemoteExecutionEngine(ExecutionEngine):
             # Prepare code - handle magic commands
             code = self._prepare_code(cell.source)
 
-            # Check if this is a duplicate cd command (optimization)
-            if "os.chdir(" in code:
-                import re
-                match = re.search(r"os\.chdir\(['\"]([^'\"]+)['\"]\)", code)
-                if match:
-                    target_dir = match.group(1)
-                    # Check current state
-                    status = self.get_status()
-                    current_dir = status.get("current_directory", "")
-                    if current_dir == target_dir:
-                        # Already in this directory, skip
-                        self.output_queue.put(StreamChunk(
-                            cell_index=cell.index,
-                            stream_type='stdout',
-                            content=f"⏭️ 已在目录 {target_dir}，跳过切换\n"
-                        ))
-                        return CellOutput(
-                            cell_index=cell.index,
-                            status=ExecutionStatus.SUCCESS,
-                            stdout=f"已在目录 {target_dir}，跳过切换",
-                            execution_time=0.0
-                        )
-
             # Execute on remote server
             response = self.session.post(
                 f"{self.base_url}/execute",
@@ -777,6 +754,92 @@ class RemoteExecutionEngine(ExecutionEngine):
         # Keep only last 50 commands
         if len(self._execution_state["command_history"]) > 50:
             self._execution_state["command_history"] = self._execution_state["command_history"][-50:]
+
+    def execute_streaming(self, cell: NotebookCell, on_output: Callable[[Dict[str, Any]], None] = None) -> Generator[Dict[str, Any], None, None]:
+        """
+        Execute a cell with streaming output using SSE.
+        
+        Args:
+            cell: The notebook cell to execute
+            on_output: Optional callback for each output chunk
+            
+        Yields:
+            Dict with 'type' and 'content' keys for each output chunk
+        """
+        if not cell.is_code:
+            yield {"type": "skipped", "content": "Non-code cell"}
+            return
+
+        if self._stop_requested:
+            yield {"type": "skipped", "content": "Execution stopped"}
+            return
+
+        # Prepare code
+        code = self._prepare_code(cell.source)
+        
+        # Send status update
+        yield {"type": "status", "content": "running", "cell_index": cell.index}
+
+        try:
+            # Use SSE endpoint for streaming
+            import sseclient
+            
+            response = self.session.post(
+                f"{self.base_url}/execute_stream",
+                json={"code": code, "timeout": self.timeout},
+                stream=True,
+                timeout=self.timeout + 60
+            )
+            response.raise_for_status()
+            
+            # Parse SSE events
+            client = sseclient.SSEClient(response)
+            for event in client.events():
+                if event.data:
+                    try:
+                        msg = json.loads(event.data)
+                        if on_output:
+                            on_output(msg)
+                        yield msg
+                    except json.JSONDecodeError:
+                        yield {"type": "raw", "content": event.data}
+                        
+        except ImportError:
+            # Fallback if sseclient not available - use manual parsing
+            yield from self._execute_streaming_manual(code, cell.index, on_output)
+        except Exception as e:
+            yield {"type": "error", "content": str(e), "error_type": type(e).__name__}
+
+    def _execute_streaming_manual(self, code: str, cell_index: int, on_output: Callable[[Dict[str, Any]], None] = None) -> Generator[Dict[str, Any], None, None]:
+        """Manual SSE parsing fallback"""
+        try:
+            response = self.session.post(
+                f"{self.base_url}/execute_stream",
+                json={"code": code, "timeout": self.timeout},
+                stream=True,
+                timeout=self.timeout + 60,
+                headers={'Accept': 'text/event-stream'}
+            )
+            response.raise_for_status()
+            
+            buffer = ""
+            for line in response.iter_lines(decode_unicode=True):
+                if line:
+                    if line.startswith('data: '):
+                        data_str = line[6:]  # Remove 'data: ' prefix
+                        try:
+                            msg = json.loads(data_str)
+                            if on_output:
+                                on_output(msg)
+                            yield msg
+                        except json.JSONDecodeError:
+                            yield {"type": "raw", "content": data_str}
+                    elif line.startswith(':'):
+                        # Heartbeat comment, ignore
+                        pass
+                        
+        except Exception as e:
+            yield {"type": "error", "content": str(e), "error_type": type(e).__name__}
 
 
 class StreamingExecutor:

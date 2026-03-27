@@ -8,6 +8,7 @@ Run Jupyter Notebooks (.ipynb) with streaming output per cell.
 import json
 import sys
 import time
+import traceback
 from pathlib import Path
 from typing import Optional
 
@@ -704,6 +705,167 @@ def history(url, limit):
         table.add_row(str(i + 1), str(timestamp), directory, cmd_preview)
 
     console.print(table)
+
+
+@main.command()
+@click.argument('notebook', type=click.Path(exists=True))
+@click.option('--url', '-u', required=True, help='ColabMCP server URL')
+@click.option('--start', '-s', default=0, help='Start from cell index')
+@click.option('--end', '-e', default=None, type=int, help='End at cell index (exclusive)')
+@click.option('--timeout', '-t', default=600, help='Timeout in seconds for streaming')
+@click.option('--verbose', '-V', is_flag=True, help='Verbose output')
+def stream(notebook, url, start, end, timeout, verbose):
+    """
+    Run a Jupyter Notebook with REAL-TIME STREAMING output.
+    
+    Uses SSE (Server-Sent Events) for live output - perfect for 
+    long-running tasks like training, bots, or continuous processes.
+
+    Example:
+        colabmcp stream notebook.ipynb -u https://xxx.ngrok-free.app
+        colabmcp stream notebook.ipynb -u https://xxx.ngrok-free.app --start 3 --end 4
+    """
+    print_banner()
+
+    # Parse notebook
+    notebook_path = Path(notebook)
+    console.print(f"[cyan]📖 Loading notebook: {notebook_path.name}[/cyan]")
+
+    try:
+        nb = NotebookParser.parse_file(notebook_path)
+    except Exception as e:
+        console.print(f"[red]❌ Failed to load notebook: {e}[/red]")
+        sys.exit(1)
+
+    code_cells = [c for c in nb.cells[start:end] if c.is_code]
+    console.print(f"[green]✓ Found {len(nb.cells)} cells ({len(code_cells)} code cells to stream)[/green]")
+
+    # Create remote engine
+    console.print(f"\n[cyan]🔗 Connecting to: {url}[/cyan]")
+    engine = RemoteExecutionEngine(url, timeout=timeout)
+
+    # Health check
+    health = engine.health_check()
+    if "error" in health:
+        console.print(f"[red]❌ Failed to connect: {health['error']}[/red]")
+        sys.exit(1)
+
+    console.print(f"[green]✓ Connected! Server uptime: {health.get('uptime_minutes', 'N/A')} min[/green]")
+
+    # Stream each cell
+    console.print(f"\n[bold cyan]🚀 Starting streaming execution...[/bold cyan]")
+    console.print(f"[dim]Press Ctrl+C to interrupt[/dim]\n")
+
+    start_time = time.time()
+    total_outputs = 0
+
+    for cell in code_cells:
+        console.print(f"\n[bold blue]━━━ Cell [{cell.index}] ━━━[/bold blue]")
+        if verbose:
+            syntax = Syntax(cell.source, "python", theme="monokai", line_numbers=False)
+            console.print(Panel(syntax, border_style="blue", padding=(0, 1)))
+        
+        console.print("[dim]⏳ Streaming...[/dim]")
+
+        try:
+            for msg in engine.execute_streaming(cell):
+                msg_type = msg.get("type", "unknown")
+                content = msg.get("content", "")
+
+                if msg_type == "stdout":
+                    console.print(content, end='')
+                    total_outputs += 1
+                elif msg_type == "stderr":
+                    console.print(f"[yellow]{content}[/yellow]", end='')
+                elif msg_type == "status":
+                    console.print(f"[dim]📌 {content}[/dim]")
+                elif msg_type == "complete":
+                    console.print(f"\n[green]{content}[/green]")
+                elif msg_type == "error":
+                    console.print(f"\n[red]❌ {content}[/red]")
+                elif msg_type == "skipped":
+                    console.print(f"[dim]⏭️ {content}[/dim]")
+                    
+        except KeyboardInterrupt:
+            console.print("\n[yellow]⚠️ Interrupting...[/yellow]")
+            # Send interrupt to server
+            engine.interrupt()
+            console.print("[yellow]⏹️ Execution interrupted by user[/yellow]")
+            break
+        except Exception as e:
+            console.print(f"\n[red]❌ Error: {e}[/red]")
+            if verbose:
+                console.print(f"[dim]{traceback.format_exc()}[/dim]")
+
+    total_time = time.time() - start_time
+
+    # Summary
+    console.print(f"\n[bold]{'─' * 50}[/bold]")
+    console.print(f"\n[bold cyan]📊 Streaming Summary:[/bold cyan]")
+
+    table = Table(show_header=False, box=None)
+    table.add_column("Key", style="cyan")
+    table.add_column("Value")
+    table.add_row("Total Time", format_duration(total_time))
+    table.add_row("Output Lines", str(total_outputs))
+
+    console.print(table)
+
+
+@main.command()
+@click.option('--url', '-u', required=True, help='ColabMCP server URL')
+@click.option('--duration', '-d', default=300, help='Duration to watch in seconds (0 = infinite)')
+def watch(url, duration):
+    """
+    Watch the remote server status in real-time.
+    
+    Useful for monitoring long-running executions.
+
+    Example:
+        colabmcp watch -u https://xxx.ngrok-free.app
+        colabmcp watch -u https://xxx.ngrok-free.app -d 60
+    """
+    print_banner()
+    
+    console.print(f"[cyan]👀 Watching server: {url}[/cyan]")
+    console.print(f"[dim]Duration: {duration}s (0 = infinite)[/dim]\n")
+
+    engine = RemoteExecutionEngine(url)
+    start_time = time.time()
+    
+    try:
+        iteration = 0
+        while True:
+            elapsed = time.time() - start_time
+            if duration > 0 and elapsed > duration:
+                console.print("\n[yellow]⏰ Watch duration reached[/yellow]")
+                break
+
+            status = engine.get_status()
+            if "error" in status:
+                console.print(f"[red]❌ Error: {status['error']}[/red]")
+                time.sleep(5)
+                continue
+
+            # Build status line
+            is_exec = status.get("is_executing", False)
+            exec_status = "🔄 Running" if is_exec else "✅ Idle"
+            cwd = status.get("current_directory", "/content")
+            last_cmd = status.get("last_command", "")[:50]
+            
+            # Clear line and print
+            console.print(
+                f"\r[dim][{format_duration(elapsed)}][/dim] "
+                f"{exec_status} | 📁 {cwd[-30:]} | "
+                f"[dim]{last_cmd}[/dim]",
+                end=""
+            )
+            
+            iteration += 1
+            time.sleep(2)
+            
+    except KeyboardInterrupt:
+        console.print("\n\n[yellow]👋 Watch stopped[/yellow]")
 
 
 if __name__ == '__main__':
