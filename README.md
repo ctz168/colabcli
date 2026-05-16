@@ -13,7 +13,7 @@ A powerful command-line tool to run Jupyter Notebooks (`.ipynb`) with **streamin
 
 Click the badge below to open the server notebook in Colab:
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ctz168/colabcli/blob/main/colab_server.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ctz168/colabcli/blob/main/colabcli.ipynb)
 
 Follow the instructions in the notebook to:
 1. Set your ngrok token
