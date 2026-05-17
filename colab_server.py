@@ -45,25 +45,23 @@ app = Flask(__name__)
 # ============== 心跳保活线程 ==============
 def heartbeat_thread():
     """心跳线程，防止 Colab 休眠"""
-    import requests
     last_ping = time.time()
 
     while keep_running:
         try:
             current_time = time.strftime("%H:%M:%S")
-            print(f"[心跳] {current_time} - 服务运行中 | 目录: {execution_state['current_directory']}", flush=True)
+            is_exec = execution_state['is_executing']
+            exec_flag = " [执行中]" if is_exec else ""
+            print(f"[心跳] {current_time} - 运行中 | 目录: {execution_state['current_directory']}{exec_flag}", flush=True)
 
-            if time.time() - last_ping > 300:
-                try:
-                    requests.get('http://localhost:5000/health', timeout=10)
-                    last_ping = time.time()
-                except:
-                    pass
+            # 不再请求 /health 端点，避免与执行锁冲突
+            # Colab 自身有保活机制，只需打印日志即可
+            last_ping = time.time()
 
-            time.sleep(30)
+            time.sleep(60)  # 30→60秒，减少心跳频率
         except Exception as e:
             print(f"[心跳错误] {e}", flush=True)
-            time.sleep(10)
+            time.sleep(30)
 
 # ============== 辅助函数 ==============
 def _check_gpu():
@@ -119,7 +117,7 @@ def _interrupt_thread(thread):
 def index():
     return jsonify({
         "name": "ColabCLI Server",
-        "version": "2.1.0",
+        "version": "2.2.0",
         "status": "running",
         "uptime_minutes": round((time.time() - start_time) / 60, 2),
         "current_directory": execution_state["current_directory"],
@@ -229,7 +227,7 @@ def execute_code():
     try:
         data = request.get_json()
         code = data.get('code', '')
-        timeout = min(data.get('timeout', 300), 600)
+        timeout = min(data.get('timeout', 600), 1800)
 
         if not code:
             return jsonify({"success": False, "error": "No code provided"})
@@ -359,7 +357,7 @@ def execute_code_stream():
 
     data = request.get_json()
     code = data.get('code', '')
-    timeout = min(data.get('timeout', 300), 600)
+    timeout = min(data.get('timeout', 600), 1800)
 
     if not code:
         stream_output_queue.put({"type": "error", "content": "No code provided"})
@@ -609,9 +607,9 @@ if __name__ == '__main__':
     print("\n" + "="*60)
     print("🚀 ColabCLI 服务器启动中...")
     print("="*60)
-    print("版本: 2.1.0")
+    print("版本: 2.2.0")
     print("功能: 心跳保活 + 错误隔离 + 中断支持 + 状态跟踪 + 流式输出")
-    print("新增: /execute_stream 端点支持 SSE 实时流式输出")
+    print("优化: 长任务稳定支持 + 心跳不干扰执行 + 600s超时")
     print("="*60 + "\n")
 
     heartbeat = threading.Thread(target=heartbeat_thread, daemon=True)
