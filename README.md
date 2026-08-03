@@ -16,9 +16,8 @@ Click the badge below to open the server notebook in Colab:
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ctz168/colabcli/blob/main/colabcli.ipynb)
 
 Follow the instructions in the notebook to:
-1. Set your ngrok token
-2. Start the server
-3. Get the public URL
+1. Start the server (aitun tunnel auto-starts, no token needed)
+2. Get the public URL
 
 ### 2. Install CLI Locally
 
@@ -30,13 +29,13 @@ pip install git+https://github.com/ctz168/colabcli.git
 
 ```bash
 # Check server health
-colabmcp health --url https://your-ngrok-url.ngrok-free.app
+colabmcp health --url https://aitun.cc/your-code
 
 # Run notebook remotely (batch mode)
-colabmcp remote notebook.ipynb --url https://your-ngrok-url.ngrok-free.app
+colabmcp remote notebook.ipynb --url https://aitun.cc/your-code
 
 # Run notebook with REAL-TIME streaming output (NEW!)
-colabmcp stream notebook.ipynb --url https://your-ngrok-url.ngrok-free.app
+colabmcp stream notebook.ipynb --url https://aitun.cc/your-code
 ```
 
 ## ✨ Features
@@ -103,13 +102,13 @@ colabmcp run notebook.ipynb -o results.json
 
 ```bash
 # Check server status
-colabmcp health --url https://your-ngrok-url.ngrok-free.app
+colabmcp health --url https://aitun.cc/your-code
 
 # Execute notebook remotely (batch mode - waits for completion)
-colabmcp remote notebook.ipynb --url https://your-ngrok-url.ngrok-free.app
+colabmcp remote notebook.ipynb --url https://aitun.cc/your-code
 
 # With timeout (for long-running tasks)
-colabmcp remote train_model.ipynb -u https://your-server.ngrok-free.app -t 3600
+colabmcp remote train_model.ipynb -u https://aitun.cc/your-code -t 3600
 ```
 
 ### 🆕 Real-Time Streaming (v2.1.0)
@@ -118,13 +117,13 @@ Perfect for long-running tasks like training, bots, or continuous processes:
 
 ```bash
 # Stream notebook output in REAL-TIME
-colabmcp stream notebook.ipynb -u https://your-server.ngrok-free.app
+colabmcp stream notebook.ipynb -u https://aitun.cc/your-code
 
 # Stream specific cells only
-colabmcp stream bot.ipynb -u https://your-server.ngrok-free.app --start 3 --end 4
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code --start 3 --end 4
 
 # Watch server status in real-time
-colabmcp watch -u https://your-server.ngrok-free.app -d 300
+colabmcp watch -u https://aitun.cc/your-code -d 300
 ```
 
 **When to use `stream` vs `remote`:**
@@ -239,19 +238,19 @@ colabmcp remote NOTEBOOK --url URL [OPTIONS]
 
 ```bash
 # 基本远程执行
-colabmcp remote notebook.ipynb -u https://xxx.ngrok-free.app
+colabmcp remote notebook.ipynb -u https://aitun.cc/your-code
 
 # 执行特定 cell（cell 3 到 cell 7）
-colabmcp remote notebook.ipynb -u https://xxx.ngrok-free.app --start 3 --end 8
+colabmcp remote notebook.ipynb -u https://aitun.cc/your-code --start 3 --end 8
 
 # 只执行第 4 个 cell（索引为 3）
-colabmcp remote notebook.ipynb -u https://xxx.ngrok-free.app -s 3 -e 4
+colabmcp remote notebook.ipynb -u https://aitun.cc/your-code -s 3 -e 4
 
 # 长时间任务（设置 1 小时超时）
-colabmcp remote train.ipynb -u https://xxx.ngrok-free.app -t 3600
+colabmcp remote train.ipynb -u https://aitun.cc/your-code -t 3600
 
 # 详细模式（显示每个 cell 的代码）
-colabmcp remote notebook.ipynb -u https://xxx.ngrok-free.app -V
+colabmcp remote notebook.ipynb -u https://aitun.cc/your-code -V
 ```
 
 ---
@@ -284,19 +283,19 @@ colabmcp stream NOTEBOOK --url URL [OPTIONS]
 
 ```bash
 # 流式执行整个 notebook
-colabmcp stream bot.ipynb -u https://xxx.ngrok-free.app
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code
 
 # 只执行 Bot 启动的 cell（假设是 cell 4）
-colabmcp stream bot.ipynb -u https://xxx.ngrok-free.app -s 4 -e 5
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code -s 4 -e 5
 
 # 执行 cell 3 到 cell 5（跳过前面的安装和环境设置）
-colabmcp stream bot.ipynb -u https://xxx.ngrok-free.app --start 3 --end 6
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code --start 3 --end 6
 
 # 详细模式（显示代码和输出）
-colabmcp stream bot.ipynb -u https://xxx.ngrok-free.app -V
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code -V
 
 # 长时间运行（设置 2 小时超时）
-colabmcp stream bot.ipynb -u https://xxx.ngrok-free.app -t 7200
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code -t 7200
 ```
 
 **中断执行：** 按 `Ctrl+C` 可中断执行，服务器保持运行。
@@ -322,13 +321,13 @@ colabmcp watch --url URL [OPTIONS]
 
 ```bash
 # 监控 5 分钟
-colabmcp watch -u https://xxx.ngrok-free.app
+colabmcp watch -u https://aitun.cc/your-code
 
 # 无限监控（按 Ctrl+C 退出）
-colabmcp watch -u https://xxx.ngrok-free.app -d 0
+colabmcp watch -u https://aitun.cc/your-code -d 0
 
 # 监控 1 小时
-colabmcp watch -u https://xxx.ngrok-free.app -d 3600
+colabmcp watch -u https://aitun.cc/your-code -d 3600
 ```
 
 ---
@@ -356,10 +355,10 @@ colabmcp interrupt --url URL
 
 ```bash
 # 中断当前执行
-colabmcp interrupt -u https://xxx.ngrok-free.app
+colabmcp interrupt -u https://aitun.cc/your-code
 
 # 简写形式
-colabmcp interrupt --url https://xxx.ngrok-free.app
+colabmcp interrupt --url https://aitun.cc/your-code
 ```
 
 **注意：** 中断后可以继续发送新的执行命令，服务器保持运行。
@@ -390,7 +389,7 @@ colabmcp status --url URL
 **示例：**
 
 ```bash
-colabmcp status -u https://xxx.ngrok-free.app
+colabmcp status -u https://aitun.cc/your-code
 ```
 
 ---
@@ -414,10 +413,10 @@ colabmcp history --url URL [OPTIONS]
 
 ```bash
 # 查看最近 20 条历史
-colabmcp history -u https://xxx.ngrok-free.app
+colabmcp history -u https://aitun.cc/your-code
 
 # 查看最近 50 条历史
-colabmcp history -u https://xxx.ngrok-free.app -l 50
+colabmcp history -u https://aitun.cc/your-code -l 50
 ```
 
 ---
@@ -439,7 +438,7 @@ colabmcp health --url URL
 **示例：**
 
 ```bash
-colabmcp health -u https://xxx.ngrok-free.app
+colabmcp health -u https://aitun.cc/your-code
 ```
 
 ---
@@ -660,17 +659,17 @@ colabmcp run report.ipynb -o report_output.json
 ```bash
 # Deploy server on Colab (with GPU runtime)
 # Then run locally:
-colabmcp remote train_model.ipynb -u https://your-colab.ngrok-free.app -t 3600
+colabmcp remote train_model.ipynb -u https://aitun.cc/your-code -t 3600
 ```
 
 ### 🆕 Long-Running Bot/Server
 
 ```bash
 # Stream bot output in real-time
-colabmcp stream telegram_bot.ipynb -u https://your-colab.ngrok-free.app --start 3
+colabmcp stream telegram_bot.ipynb -u https://aitun.cc/your-code --start 3
 
 # Watch server while bot runs
-colabmcp watch -u https://your-colab.ngrok-free.app -d 0
+colabmcp watch -u https://aitun.cc/your-code -d 0
 ```
 
 ### CI/CD Integration
@@ -716,9 +715,8 @@ fi
 This CLI works seamlessly with Google Colab:
 
 1. **Open the server notebook** in Colab using the badge above
-2. **Set your ngrok token** ([get one free](https://dashboard.ngrok.com/get-started/your-authtoken))
-3. **Run all cells** to start the server
-4. **Copy the public URL** and use it with `colabmcp remote` or `colabmcp stream`
+2. **Run all cells** - aitun tunnel starts automatically (no token needed)
+3. **Copy the public URL** and use it with `colabmcp remote` or `colabmcp stream`
 
 ## 📋 Changelog
 

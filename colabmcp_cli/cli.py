@@ -246,7 +246,7 @@ def remote(notebook, url, start, end, show_code, stop_on_error, timeout, verbose
 
     Example:
         colabmcp remote notebook.ipynb --url https://your-server.modelscope.cn
-        colabmcp remote notebook.ipynb -u https://xxx.ngrok-free.app -t 600
+        colabmcp remote notebook.ipynb -u https://aitun.cc/your-code -t 600
     """
     print_banner()
 
@@ -596,7 +596,7 @@ def interrupt(url):
     Does NOT stop the server, only the running code.
 
     Example:
-        colabmcp interrupt --url https://your-server.ngrok-free.app
+        colabmcp interrupt --url https://aitun.cc/your-code
     """
     print_banner()
 
@@ -623,7 +623,7 @@ def status(url):
     Shows current directory, running status, last command, etc.
 
     Example:
-        colabmcp status --url https://your-server.ngrok-free.app
+        colabmcp status --url https://aitun.cc/your-code
     """
     print_banner()
 
@@ -664,8 +664,8 @@ def history(url, limit):
     Get command execution history from the remote server.
 
     Example:
-        colabmcp history --url https://your-server.ngrok-free.app
-        colabmcp history --url https://your-server.ngrok-free.app --limit 50
+        colabmcp history --url https://aitun.cc/your-code
+        colabmcp history --url https://aitun.cc/your-code --limit 50
     """
     print_banner()
 
@@ -722,8 +722,8 @@ def stream(notebook, url, start, end, timeout, verbose):
     long-running tasks like training, bots, or continuous processes.
 
     Example:
-        colabmcp stream notebook.ipynb -u https://xxx.ngrok-free.app
-        colabmcp stream notebook.ipynb -u https://xxx.ngrok-free.app --start 3 --end 4
+        colabmcp stream notebook.ipynb -u https://aitun.cc/your-code
+        colabmcp stream notebook.ipynb -u https://aitun.cc/your-code --start 3 --end 4
     """
     print_banner()
 
@@ -822,8 +822,8 @@ def watch(url, duration):
     Useful for monitoring long-running executions.
 
     Example:
-        colabmcp watch -u https://xxx.ngrok-free.app
-        colabmcp watch -u https://xxx.ngrok-free.app -d 60
+        colabmcp watch -u https://aitun.cc/your-code
+        colabmcp watch -u https://aitun.cc/your-code -d 60
     """
     print_banner()
     
