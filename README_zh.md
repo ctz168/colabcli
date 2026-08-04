@@ -1,0 +1,773 @@
+# 🚀 ColabCLI
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ctz168/colabcli/blob/main/colab_server.ipynb)
+[![GitHub](https://img.shields.io/badge/GitHub-ctz168%2Fcolabcli-blue?logo=github)](https://github.com/ctz168/colabcli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Version](https://img.shields.io/badge/version-2.1.0-green.svg)](https://github.com/ctz168/colabcli)
+
+一个强大的命令行工具，用于运行 Jupyter Notebook（`.ipynb`），支持**逐 cell 流式输出**，以及针对长时间运行任务的**实时 SSE 流式**功能。
+
+---
+
+## 🎯 快速开始
+
+### 1. 在 Google Colab 上部署服务器
+
+点击下方徽章，在 Colab 中打开服务器 Notebook：
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ctz168/colabcli/blob/main/colabcli.ipynb)
+
+按照 Notebook 中的说明：
+1. 启动服务器（aitun 隧道自动启动，无需 token）
+2. 获取公网 URL
+
+### 2. 本地安装 CLI
+
+```bash
+pip install git+https://github.com/ctz168/colabcli.git
+```
+
+### 3. 远程运行 Notebook
+
+```bash
+# 检查服务器健康状态
+colabmcp health --url https://aitun.cc/your-code
+
+# 远程运行 notebook（批量模式）
+colabmcp remote notebook.ipynb --url https://aitun.cc/your-code
+
+# 实时流式运行 notebook（新功能！）
+colabmcp stream notebook.ipynb --url https://aitun.cc/your-code
+```
+
+---
+
+## ✨ 功能特性
+
+### 核心功能
+- 📓 **本地运行 Jupyter Notebook** - 直接从 CLI 执行 `.ipynb` 文件
+- 🌐 **远程执行** - 在 Google Colab 上运行 notebook，支持 GPU
+- 📊 **流式输出** - 实时查看每个 cell 的执行输出
+- 🔧 **IPython magic 支持** - 完整支持 `%cd`、`%env`、`!cmd`、`%%bash` 等
+- 🔄 **变量持久化** - 变量在 cell 之间保持
+- ⏱️ **执行计时** - 跟踪每个 cell 的执行时间
+- 🛑 **错误处理** - 出错时停止或继续执行
+
+### v2.1.0 新功能 🆕
+- 🌊 **实时 SSE 流式** - 长时间任务（Bot、训练等）的实时输出
+- 👀 **Watch 模式** - 实时监控服务器状态
+- ⏹️ **中断执行** - 停止长时间运行的代码，无需重启服务器
+- 📊 **状态跟踪** - 了解当前目录、运行状态、命令历史
+- 📜 **命令历史** - 查看过去的执行及其结果
+- 🚫 **重复检测** - 自动跳过冗余的 `cd` 命令
+
+### 其他功能
+- 📝 **Notebook 转换** - 将 `.ipynb` 转换为 `.py` 脚本
+- 🔍 **Notebook 检查** - 查看 notebook 结构和元数据
+
+---
+
+## 📦 安装
+
+### 从 GitHub 安装
+
+```bash
+pip install git+https://github.com/ctz168/colabcli.git
+```
+
+### 从源码安装
+
+```bash
+git clone https://github.com/ctz168/colabcli.git
+cd colabcli
+pip install -e .
+```
+
+### 依赖
+
+```bash
+pip install requests rich click ipython
+```
+
+---
+
+## 🚀 使用方法
+
+### 本地运行 Notebook
+
+```bash
+# 基本用法
+colabmcp run notebook.ipynb
+
+# 带选项
+colabmcp run notebook.ipynb --start 5 --end 10 --verbose
+
+# 保存输出到 JSON
+colabmcp run notebook.ipynb -o results.json
+```
+
+### 在远程服务器上运行（Google Colab）
+
+```bash
+# 检查服务器状态
+colabmcp health --url https://aitun.cc/your-code
+
+# 远程执行 notebook（批量模式 - 等待完成）
+colabmcp remote notebook.ipynb --url https://aitun.cc/your-code
+
+# 带超时（适合长时间运行的任务）
+colabmcp remote train_model.ipynb -u https://aitun.cc/your-code -t 3600
+```
+
+### 🆕 实时流式执行（v2.1.0）
+
+非常适合训练、Bot、或持续运行等长时间任务：
+
+```bash
+# 实时流式输出 notebook
+colabmcp stream notebook.ipynb -u https://aitun.cc/your-code
+
+# 只流式执行特定 cell
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code --start 3 --end 4
+
+# 实时监控服务器状态
+colabmcp watch -u https://aitun.cc/your-code -d 300
+```
+
+**何时使用 `stream` 而非 `remote`：**
+- 短任务使用 `remote`（数据处理、快速脚本）
+- 长时间运行的任务使用 `stream`（训练、Bot、服务器）
+
+### 其他命令
+
+```bash
+# 查看 notebook 信息
+colabmcp info notebook.ipynb
+
+# 列出并预览 cell
+colabmcp cells notebook.ipynb
+
+# 转换为 Python 脚本
+colabmcp convert notebook.ipynb -o script.py
+
+# 交互式 REPL
+colabmcp repl
+```
+
+---
+
+## 📖 命令参考
+
+### 命令概览
+
+| 命令 | 描述 | 用途 |
+|------|------|------|
+| `colabmcp run` | 本地执行 notebook | 快速测试、本地开发 |
+| `colabmcp remote` | 远程批量执行 | 短时间任务、数据处理 |
+| `colabmcp stream` | 🆕 远程流式执行 | 长时间任务、Bot、训练 |
+| `colabmcp watch` | 🆕 监控服务器状态 | 查看远程执行进度 |
+| `colabmcp health` | 检查服务器健康状态 | 验证连接 |
+| `colabmcp status` | 获取执行状态 | 查看当前目录和状态 |
+| `colabmcp interrupt` | 中断当前执行 | 停止运行中的代码 |
+| `colabmcp history` | 查看命令历史 | 调试、回溯 |
+| `colabmcp info` | 查看 notebook 信息 | 了解 notebook 结构 |
+| `colabmcp cells` | 列出 cell 内容 | 预览代码 |
+| `colabmcp convert` | 转换为 Python 脚本 | 导出代码 |
+| `colabmcp repl` | 交互式 Python REPL | 本地测试 |
+
+---
+
+### `colabmcp run` - 本地执行
+
+在本地执行 Jupyter Notebook，支持实时输出。
+
+```bash
+colabmcp run NOTEBOOK [OPTIONS]
+```
+
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--start` | `-s` | 0 | 起始 cell 索引（从哪个 cell 开始执行） |
+| `--end` | `-e` | 最后一个 | 结束 cell 索引（不包含该索引，类似 Python slice） |
+| `--show-code` | - | True | 执行前显示代码 |
+| `--show-markdown` | - | False | 显示 markdown cell |
+| `--stop-on-error` | - | True | 遇到错误时停止 |
+| `--continue-on-error` | - | False | 遇到错误时继续 |
+| `--verbose` | `-V` | False | 详细输出 |
+| `--output` | `-o` | - | 保存结果到 JSON 文件 |
+
+**示例：**
+
+```bash
+# 执行整个 notebook
+colabmcp run notebook.ipynb
+
+# 只执行 cell 5 到 cell 9（不包含 cell 10）
+colabmcp run notebook.ipynb --start 5 --end 10
+
+# 执行从 cell 3 开始到结尾
+colabmcp run notebook.ipynb -s 3
+
+# 只执行 cell 0（第一个 cell）
+colabmcp run notebook.ipynb --end 1
+
+# 错误时继续执行
+colabmcp run notebook.ipynb --continue-on-error
+
+# 保存执行结果
+colabmcp run notebook.ipynb -o results.json
+```
+
+---
+
+### `colabmcp remote` - 远程批量执行
+
+在远程服务器上执行 notebook，等待所有 cell 完成后返回结果。
+
+```bash
+colabmcp remote NOTEBOOK --url URL [OPTIONS]
+```
+
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 必需 | 说明 |
+|------|------|--------|------|------|
+| `--url` | `-u` | - | ✅ | ColabMCP 服务器 URL |
+| `--start` | `-s` | 0 | - | 起始 cell 索引 |
+| `--end` | `-e` | 最后一个 | - | 结束 cell 索引（不包含） |
+| `--stop-on-error` | - | True | - | 遇到错误时停止 |
+| `--continue-on-error` | - | False | - | 遇到错误时继续 |
+| `--timeout` | `-t` | 300 | - | 超时时间（秒） |
+| `--verbose` | `-V` | False | - | 详细输出 |
+
+**示例：**
+
+```bash
+# 基本远程执行
+colabmcp remote notebook.ipynb -u https://aitun.cc/your-code
+
+# 执行特定 cell（cell 3 到 cell 7）
+colabmcp remote notebook.ipynb -u https://aitun.cc/your-code --start 3 --end 8
+
+# 只执行第 4 个 cell（索引为 3）
+colabmcp remote notebook.ipynb -u https://aitun.cc/your-code -s 3 -e 4
+
+# 长时间任务（设置 1 小时超时）
+colabmcp remote train.ipynb -u https://aitun.cc/your-code -t 3600
+
+# 详细模式（显示每个 cell 的代码）
+colabmcp remote notebook.ipynb -u https://aitun.cc/your-code -V
+```
+
+---
+
+### `colabmcp stream` 🆕 - 远程流式执行
+
+使用 SSE (Server-Sent Events) 实时推送输出，**适合长时间运行的任务**。
+
+```bash
+colabmcp stream NOTEBOOK --url URL [OPTIONS]
+```
+
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 必需 | 说明 |
+|------|------|--------|------|------|
+| `--url` | `-u` | - | ✅ | ColabMCP 服务器 URL |
+| `--start` | `-s` | 0 | - | 起始 cell 索引 |
+| `--end` | `-e` | 最后一个 | - | 结束 cell 索引（不包含） |
+| `--timeout` | `-t` | 600 | - | 流式超时时间（秒） |
+| `--verbose` | `-V` | False | - | 显示代码 |
+
+**使用场景：**
+- 🤖 运行 Telegram/Discord Bot
+- 🧠 模型训练（实时查看进度）
+- 📊 数据处理（查看中间输出）
+- 🔄 持续运行的监控脚本
+
+**示例：**
+
+```bash
+# 流式执行整个 notebook
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code
+
+# 只执行 Bot 启动的 cell（假设是 cell 4）
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code -s 4 -e 5
+
+# 执行 cell 3 到 cell 5（跳过前面的安装和环境设置）
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code --start 3 --end 6
+
+# 详细模式（显示代码和输出）
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code -V
+
+# 长时间运行（设置 2 小时超时）
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code -t 7200
+```
+
+**中断执行：** 按 `Ctrl+C` 可中断执行，服务器保持运行。
+
+---
+
+### `colabmcp watch` 🆕 - 服务器监控
+
+实时监控远程服务器的状态。
+
+```bash
+colabmcp watch --url URL [OPTIONS]
+```
+
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--url` | `-u` | - (必需) | ColabMCP 服务器 URL |
+| `--duration` | `-d` | 300 | 监控时长（秒），设为 0 无限监控 |
+
+**示例：**
+
+```bash
+# 监控 5 分钟
+colabmcp watch -u https://aitun.cc/your-code
+
+# 无限监控（按 Ctrl+C 退出）
+colabmcp watch -u https://aitun.cc/your-code -d 0
+
+# 监控 1 小时
+colabmcp watch -u https://aitun.cc/your-code -d 3600
+```
+
+---
+
+### `colabmcp interrupt` - 中断执行
+
+中断远程服务器上正在执行的代码，**不会停止服务器本身**。
+
+```bash
+colabmcp interrupt --url URL
+```
+
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--url` | `-u` | - (必需) | ColabMCP 服务器 URL |
+
+**使用场景：**
+- Bot 运行时想要停止，但不想重新启动服务器
+- 训练过程中发现参数错误，需要中断
+- 死循环代码需要强制停止
+
+**示例：**
+
+```bash
+# 中断当前执行
+colabmcp interrupt -u https://aitun.cc/your-code
+
+# 简写形式
+colabmcp interrupt --url https://aitun.cc/your-code
+```
+
+**注意：** 中断后可以继续发送新的执行命令，服务器保持运行。
+
+---
+
+### `colabmcp status` - 获取执行状态
+
+查看远程服务器的当前状态。
+
+```bash
+colabmcp status --url URL
+```
+
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--url` | `-u` | - (必需) | ColabMCP 服务器 URL |
+
+**返回信息：**
+- `is_executing` - 是否正在执行代码
+- `current_directory` - 当前工作目录
+- `last_command` - 最后执行的命令
+- `last_execution_time` - 最后执行耗时
+- `recent_history` - 最近 5 条命令
+
+**示例：**
+
+```bash
+colabmcp status -u https://aitun.cc/your-code
+```
+
+---
+
+### `colabmcp history` - 查看命令历史
+
+查看远程服务器上的命令执行历史。
+
+```bash
+colabmcp history --url URL [OPTIONS]
+```
+
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--url` | `-u` | - (必需) | ColabMCP 服务器 URL |
+| `--limit` | `-l` | 20 | 显示的历史条数 |
+
+**示例：**
+
+```bash
+# 查看最近 20 条历史
+colabmcp history -u https://aitun.cc/your-code
+
+# 查看最近 50 条历史
+colabmcp history -u https://aitun.cc/your-code -l 50
+```
+
+---
+
+### `colabmcp health` - 健康检查
+
+检查远程服务器的健康状态。
+
+```bash
+colabmcp health --url URL
+```
+
+**返回信息：**
+- 服务器状态和运行时间
+- 内存使用情况
+- GPU 可用性
+- 当前工作目录
+
+**示例：**
+
+```bash
+colabmcp health -u https://aitun.cc/your-code
+```
+
+---
+
+### `colabmcp cells` - 列出 Cell
+
+列出 notebook 中的 cell 内容，用于预览代码。
+
+```bash
+colabmcp cells NOTEBOOK [OPTIONS]
+```
+
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--start` | `-s` | 0 | 起始 cell 索引 |
+| `--end` | `-e` | 最后一个 | 结束 cell 索引（不包含） |
+| `--verbose` | `-V` | False | 显示元数据 |
+
+**示例：**
+
+```bash
+# 查看所有 cell
+colabmcp cells notebook.ipynb
+
+# 查看 cell 3 到 cell 7
+colabmcp cells notebook.ipynb -s 3 -e 8
+
+# 查看第一个 cell
+colabmcp cells notebook.ipynb -e 1
+```
+
+---
+
+### `colabmcp info` - Notebook 信息
+
+显示 notebook 的基本信息。
+
+```bash
+colabmcp info NOTEBOOK
+```
+
+**返回信息：**
+- 文件路径和格式版本
+- 总 cell 数量（代码 cell 和 markdown cell）
+- 内核信息
+- Cell 概览表格
+
+---
+
+### `colabmcp convert` - 转换为 Python
+
+将 notebook 转换为 Python 脚本。
+
+```bash
+colabmcp convert NOTEBOOK [OPTIONS]
+```
+
+**参数说明：**
+
+| 参数 | 简写 | 默认值 | 说明 |
+|------|------|--------|------|
+| `--output` | `-o` | notebook同名.py | 输出文件路径 |
+
+**示例：**
+
+```bash
+# 转换（输出到同名 .py 文件）
+colabmcp convert notebook.ipynb
+
+# 指定输出文件
+colabmcp convert notebook.ipynb -o script.py
+```
+
+---
+
+## 🔧 Cell 索引详解
+
+### 索引规则
+
+Cell 索引从 **0** 开始，`--end` 参数是**不包含**的（类似 Python 的 slice）。
+
+```
+Notebook 结构:
+Cell 0: # 导入库        ← Markdown
+Cell 1: import numpy    ← 代码
+Cell 2: # 数据加载      ← Markdown  
+Cell 3: load_data()     ← 代码
+Cell 4: # 模型训练      ← Markdown
+Cell 5: train_model()   ← 代码
+```
+
+### 执行范围示例
+
+| 命令 | 执行的 Cell | 说明 |
+|------|-------------|------|
+| `-s 0 -e 6` 或省略 | 1, 3, 5 | 全部代码 cell（跳过 markdown） |
+| `-s 3 -e 6` | 3, 5 | 从 cell 3 开始 |
+| `-s 5 -e 6` | 5 | 只执行 cell 5 |
+| `-s 1 -e 4` | 1, 3 | 执行 cell 1 和 3 |
+| `-s 3` | 3, 5 | 从 cell 3 到结尾 |
+| `-e 3` | 1 | 只执行第一个代码 cell |
+
+### 常用场景
+
+```bash
+# 场景 1: 跳过安装和环境设置，直接运行核心逻辑
+colabmcp stream bot.ipynb -u $URL --start 4
+
+# 场景 2: 只运行某个特定 cell（假设是 cell 3）
+colabmcp remote notebook.ipynb -u $URL -s 3 -e 4
+
+# 场景 3: 调试某个范围的问题
+colabmcp run notebook.ipynb --start 5 --end 8 -V
+
+# 场景 4: 先预览再执行
+colabmcp cells notebook.ipynb -s 4 -e 6
+colabmcp stream notebook.ipynb -u $URL -s 4 -e 6
+```
+
+---
+
+## 🔧 支持的 IPython Magic 命令
+
+| Magic 命令 | 示例 | 说明 |
+|-----------|------|------|
+| `%cd` | `%cd /content/project` | 切换目录 |
+| `%pwd` | `%pwd` | 打印当前工作目录 |
+| `%env` | `%env`、`%env VAR` | 显示/获取环境变量 |
+| `%set_env` | `%set_env VAR value` | 设置环境变量 |
+| `%pip` | `%pip install package` | 安装 Python 包 |
+| `!cmd` | `!git clone URL` | 执行 shell 命令 |
+| `%%writefile` | `%%writefile file.py` | 将 cell 内容写入文件 |
+| `%%bash` | `%%bash` | 以 bash 脚本运行 cell |
+| `%time` | `%time func()` | 计时执行 |
+| `%who` | `%who` | 列出变量 |
+
+---
+
+## 📝 输出示例
+
+### 控制台输出
+
+```
+━━━ Cell [0] ━━━
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ print("Hello, World!")                                                       │
+│ for i in range(3):                                                           │
+│     print(f"Count: {i}")                                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+⏳ 运行中...
+Hello, World!
+Count: 0
+Count: 1
+Count: 2
+✅ 完成 (45ms)
+
+━━━ Cell [1] ━━━
+...
+```
+
+### 流式输出（v2.1.0）
+
+```
+━━━ Cell [3] ━━━
+⏳ 流式执行中...
+📌 执行: python main.py --mode telegram
+[Bot] Token: 7983263905:AAFs...
+[Bot] 启动中...
+按 Ctrl+C 停止 Bot
+============================================================
+[心跳] 14:32:15 - 服务运行中 | 目录: /content/stdpbrain
+[Bot] 收到消息: 你好
+[Bot] 回复: 你好！我是类人脑AI...
+[心跳] 14:32:45 - 服务运行中 | 目录: /content/stdpbrain
+...
+⏹️ 执行被用户中断
+
+📊 流式执行摘要:
+总耗时      5m 32.1s
+输出行数    127
+```
+
+### JSON 输出（使用 `-o` 选项）
+
+```json
+{
+  "notebook": "analysis.ipynb",
+  "total_time": 2.345,
+  "results": [
+    {
+      "cell_index": 0,
+      "status": "success",
+      "stdout": "Hello, World!\nCount: 0\nCount: 1\nCount: 2\n",
+      "execution_time": 0.045,
+      "variables": ["data"]
+    }
+  ]
+}
+```
+
+---
+
+## 🎯 使用场景
+
+### 数据分析流水线
+
+```bash
+# 运行数据预处理
+colabmcp run preprocess.ipynb
+
+# 运行分析（跳过前 3 个 cell）
+colabmcp run analysis.ipynb --start 3
+
+# 生成报告
+colabmcp run report.ipynb -o report_output.json
+```
+
+### 远程 GPU 计算
+
+```bash
+# 在 Colab 上部署服务器（GPU 运行时）
+# 然后在本地运行：
+colabmcp remote train_model.ipynb -u https://aitun.cc/your-code -t 3600
+```
+
+### 🆕 长时间运行的 Bot/服务器
+
+```bash
+# 实时流式输出 Bot 运行结果
+colabmcp stream telegram_bot.ipynb -u https://aitun.cc/your-code --start 3
+
+# 在 Bot 运行时监控服务器
+colabmcp watch -u https://aitun.cc/your-code -d 0
+```
+
+### CI/CD 集成
+
+```bash
+# 在 CI 流水线中
+colabmcp run tests.ipynb --continue-on-error -o test_results.json
+
+# 检查退出码
+if [ $? -eq 0 ]; then
+    echo "All tests passed!"
+fi
+```
+
+---
+
+## 🔧 架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      ColabCLI v2.1.0                        │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐   ┌─────────────┐   ┌─────────────────┐   │
+│  │   CLI       │   │  Notebook   │   │   Execution     │   │
+│  │   (click)   │──▶│   Parser    │──▶│   Engine        │   │
+│  └─────────────┘   └─────────────┘   └─────────────────┘   │
+│                                              │              │
+│                          ┌──────────────────┼─────────────┐ │
+│                          ▼                  ▼             │ │
+│                   ┌───────────┐      ┌───────────┐       │ │
+│                   │  Local    │      │  Remote   │       │ │
+│                   │  Engine   │      │  Engine   │       │ │
+│                   └───────────┘      └───────────┘       │ │
+│                          │                  │             │ │
+│                          ▼                  ▼             │ │
+│                   ┌─────────────────────────────────────┐ │ │
+│                   │      Streaming Output Display       │ │ │
+│                   │    (rich console + SSE support)     │ │ │
+│                   └─────────────────────────────────────┘ │ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 🤝 与 Google Colab 集成
+
+此 CLI 可与 Google Colab 无缝配合：
+
+1. 使用上方徽章在 Colab 中**打开服务器 Notebook**
+2. **运行所有 cell** - aitun 隧道自动启动（无需 token）
+3. **复制公网 URL**，并与 `colabmcp remote` 或 `colabmcp stream` 一起使用
+
+---
+
+## 📋 更新日志
+
+### v2.1.0（最新）
+- 🆕 新增 `/execute_stream` SSE 端点，用于实时输出
+- 🆕 新增 `colabmcp stream` 命令，用于流式执行
+- 🆕 新增 `colabmcp watch` 命令，用于服务器监控
+- ✨ 改进流式任务的中断处理
+- 🐛 修复 shell 命令输出流式问题
+
+### v2.0.0
+- 🆕 新增 `/interrupt` 端点 - 停止代码而不杀死服务器
+- 🆕 新增 `/status` 端点 - 跟踪当前目录和执行状态
+- 🆕 新增 `/history` 端点 - 查看命令执行历史
+- ✨ 智能重复检测 `cd` 命令
+
+### v1.0.0
+- 初始版本
+- 基础 notebook 执行（本地和远程）
+- IPython magic 命令支持
+- 逐 cell 流式输出
+
+## 🔒 安全说明
+
+- **本地执行**：代码以您的用户权限运行
+- **远程执行**：代码在远程服务器上以完全权限运行
+- **无认证**：ColabMCP 服务器没有内置认证 - 请将 URL 保密
+
+---
+
+## 📄 许可证
+
+MIT License - 详见 [LICENSE](LICENSE) 文件。
+
+## 🙏 致谢
+
+- 原始想法：[colabmcp](https://github.com/ctz168/colabmcp)
+- 基于 [Click](https://click.palletsprojects.com/)、[Rich](https://github.com/Textualize/rich) 和 [IPython](https://ipython.org/) 构建
