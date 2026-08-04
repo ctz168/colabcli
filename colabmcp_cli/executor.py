@@ -20,6 +20,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, Generator, List, Optional, TextIO, Union
 
 from .notebook import Notebook, NotebookCell, CellType
+from .i18n import t
 
 
 class ExecutionStatus(Enum):
@@ -247,7 +248,7 @@ class LocalExecutionEngine(ExecutionEngine):
                 # Use IPython to run cells with magic
                 result = self.shell.run_cell(code)
                 if not result.success:
-                    raise result.error_in_exec if result.error_in_exec else Exception("Execution failed")
+                    raise result.error_in_exec if result.error_in_exec else Exception(t('execution_failed'))
             else:
                 # Regular Python execution
                 exec_globals = {**self.global_vars}
@@ -393,11 +394,11 @@ class RemoteExecutionEngine(ExecutionEngine):
             result = response.json()
 
             # Check if server was busy
-            if result.get("error") == "另一个代码正在执行中，请稍后重试":
+            if result.get("error") == t('server_busy'):
                 self.output_queue.put(StreamChunk(
                     cell_index=cell.index,
                     stream_type='error',
-                    content="⚠️ 服务器繁忙，正在等待...\n"
+                    content=t('server_busy_waiting') + '\n'
                 ))
                 # Wait and retry once
                 time.sleep(2)
@@ -460,7 +461,7 @@ class RemoteExecutionEngine(ExecutionEngine):
                 self.output_queue.put(StreamChunk(
                     cell_index=cell.index,
                     stream_type='error',
-                    content=result.get("error", "Unknown error")
+                    content=result.get("error", t('unknown_error'))
                 ))
 
             return output
@@ -525,9 +526,11 @@ class RemoteExecutionEngine(ExecutionEngine):
                 dir_path = stripped[4:].strip()
                 # Remove quotes if present
                 dir_path = dir_path.strip('"\'')
-                prepared_lines.append(f'import os; os.chdir({repr(dir_path)}); print(f"📁 切换到目录: {{os.getcwd()}}")')
+                _tpl = t('magic_cd')
+                prepared_lines.append(f'import os; os.chdir({repr(dir_path)}); print({repr(_tpl)}.format(dir=os.getcwd()))')
             elif stripped == '%cd':
-                prepared_lines.append('import os; print(f"当前目录: {os.getcwd()}")')
+                _tpl = t('magic_pwd')
+                prepared_lines.append(f'import os; print({repr(_tpl)}.format(dir=os.getcwd()))')
 
             # Handle %pwd - print working directory
             elif stripped == '%pwd':
@@ -545,7 +548,8 @@ class RemoteExecutionEngine(ExecutionEngine):
                 match = re.match(r'%set_env\s+(\w+)\s*(.*)', stripped)
                 if match:
                     var_name, var_value = match.groups()
-                    prepared_lines.append(f'import os; os.environ[{repr(var_name)}] = {repr(var_value)}; print(f"✅ 设置环境变量: {var_name}={var_value}")')
+                    _tpl = t('magic_set_env')
+                    prepared_lines.append(f'import os; os.environ[{repr(var_name)}] = {repr(var_value)}; print({repr(_tpl)}.format(name={repr(var_name)}, value={repr(var_value)}))')
 
             # Handle %pip install with full argument support
             elif stripped.startswith('%pip install') or stripped.startswith('%pip uninstall'):
@@ -570,15 +574,17 @@ class RemoteExecutionEngine(ExecutionEngine):
                     # Try to convert known magics
                     if magic_name == 'time':
                         # %time command - just run the code with timing
-                        prepared_lines.append(f'import time; _start = time.time(); {magic_args}; print(f"⏱️ 执行时间: {{time.time() - _start:.3f}}s")')
+                        _tpl = t('magic_time')
+                        prepared_lines.append(f'import time; _start = time.time(); {magic_args}; print({repr(_tpl)}.format(time=round(time.time() - _start, 3)))')
                     elif magic_name == 'who':
-                        prepared_lines.append('print("Variables:", [k for k in dir() if not k.startswith("_")])')
+                        _tpl = t('magic_who')
+                        prepared_lines.append(f'print({repr(_tpl)}.format(vars=[k for k in dir() if not k.startswith("_")]))')
                     elif magic_name == 'reset':
-                        prepared_lines.append('print("⚠️ %reset 在远程执行中被跳过")')
+                        prepared_lines.append(f'print({repr(t("magic_reset_skipped"))})')
                     elif magic_name == 'load':
-                        prepared_lines.append(f'print("⚠️ %load 需要手动加载文件: {magic_args}")')
+                        prepared_lines.append(f'print({repr(t("magic_load_skipped", file=magic_args))})')
                     else:
-                        prepared_lines.append(f'print("⚠️ 未知 magic command: %{magic_name}")')
+                        prepared_lines.append(f'print({repr(t("magic_unknown", name=magic_name))})')
                 else:
                     prepared_lines.append(f'# [Magic skipped]: {stripped}')
 
@@ -598,7 +604,8 @@ class RemoteExecutionEngine(ExecutionEngine):
         if magic_type == 'writefile':
             filename = magic_arg.strip()
             file_content = '\n'.join(content)
-            result.append(f'''import os; _dir = os.path.dirname({repr(filename)}); _dir and os.makedirs(_dir, exist_ok=True); open({repr(filename)}, 'w').write({repr(file_content)}); print(f"✅ 写入文件: {repr(filename)} ({len({repr(file_content)})} bytes)")''')
+            _msg = t('magic_writefile', file=filename, size=len(file_content))
+            result.append(f'''import os; _dir = os.path.dirname({repr(filename)}); _dir and os.makedirs(_dir, exist_ok=True); open({repr(filename)}, 'w').write({repr(file_content)}); print({repr(_msg)})''')
 
         elif magic_type == 'bash':
             bash_script = '\n'.join(content)
@@ -609,11 +616,12 @@ class RemoteExecutionEngine(ExecutionEngine):
             result.append(f'print({repr(html_content)})')
 
         elif magic_type == 'javascript' or magic_type == 'js':
-            result.append('print("⚠️ JavaScript cell magic 在 Python 环境中不可用")')
+            result.append(f'print({repr(t("magic_js_unavailable"))})')
 
         elif magic_type == 'timeit':
             code_to_time = '\n'.join(content)
-            result.append(f'''import timeit; _result = timeit.timeit({repr(code_to_time)}, number=100); print(f"⏱️ 平均执行时间: {{_result/100*1000:.3f}}ms (100次)")''')
+            _tpl = t('magic_timeit')
+            result.append(f'''import timeit; _result = timeit.timeit({repr(code_to_time)}, number=100); print({repr(_tpl)}.format(time=_result/100*1000))''')
 
         else:
             # Unknown cell magic - skip with warning
@@ -767,11 +775,11 @@ class RemoteExecutionEngine(ExecutionEngine):
             Dict with 'type' and 'content' keys for each output chunk
         """
         if not cell.is_code:
-            yield {"type": "skipped", "content": "Non-code cell"}
+            yield {"type": "skipped", "content": t('non_code_cell')}
             return
 
         if self._stop_requested:
-            yield {"type": "skipped", "content": "Execution stopped"}
+            yield {"type": "skipped", "content": t('execution_stopped')}
             return
 
         # Prepare code

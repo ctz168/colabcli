@@ -7,6 +7,10 @@
 
 A powerful command-line tool to run Jupyter Notebooks (`.ipynb`) with **streaming output per cell** and **real-time SSE streaming** for long-running tasks.
 
+一个强大的命令行工具，用于运行 Jupyter Notebook（`.ipynb`），支持**逐 cell 流式输出**，以及针对长时间运行任务的**实时 SSE 流式**功能。
+
+---
+
 ## 🎯 Quick Start
 
 ### 1. Deploy Server on Google Colab
@@ -38,6 +42,41 @@ colabmcp remote notebook.ipynb --url https://aitun.cc/your-code
 colabmcp stream notebook.ipynb --url https://aitun.cc/your-code
 ```
 
+---
+
+## 🎯 快速开始
+
+### 1. 在 Google Colab 上部署服务器
+
+点击下方徽章，在 Colab 中打开服务器 Notebook：
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ctz168/colabcli/blob/main/colabcli.ipynb)
+
+按照 Notebook 中的说明：
+1. 启动服务器（aitun 隧道自动启动，无需 token）
+2. 获取公网 URL
+
+### 2. 本地安装 CLI
+
+```bash
+pip install git+https://github.com/ctz168/colabcli.git
+```
+
+### 3. 远程运行 Notebook
+
+```bash
+# 检查服务器健康状态
+colabmcp health --url https://aitun.cc/your-code
+
+# 远程运行 notebook（批量模式）
+colabmcp remote notebook.ipynb --url https://aitun.cc/your-code
+
+# 实时流式运行 notebook（新功能！）
+colabmcp stream notebook.ipynb --url https://aitun.cc/your-code
+```
+
+---
+
 ## ✨ Features
 
 ### Core Features
@@ -61,6 +100,33 @@ colabmcp stream notebook.ipynb --url https://aitun.cc/your-code
 - 📝 **Notebook conversion** - Convert `.ipynb` to `.py` scripts
 - 🔍 **Notebook inspection** - View notebook structure and metadata
 
+---
+
+## ✨ 功能特性
+
+### 核心功能
+- 📓 **本地运行 Jupyter Notebook** - 直接从 CLI 执行 `.ipynb` 文件
+- 🌐 **远程执行** - 在 Google Colab 上运行 notebook，支持 GPU
+- 📊 **流式输出** - 实时查看每个 cell 的执行输出
+- 🔧 **IPython magic 支持** - 完整支持 `%cd`、`%env`、`!cmd`、`%%bash` 等
+- 🔄 **变量持久化** - 变量在 cell 之间保持
+- ⏱️ **执行计时** - 跟踪每个 cell 的执行时间
+- 🛑 **错误处理** - 出错时停止或继续执行
+
+### v2.1.0 新功能 🆕
+- 🌊 **实时 SSE 流式** - 长时间任务（Bot、训练等）的实时输出
+- 👀 **Watch 模式** - 实时监控服务器状态
+- ⏹️ **中断执行** - 停止长时间运行的代码，无需重启服务器
+- 📊 **状态跟踪** - 了解当前目录、运行状态、命令历史
+- 📜 **命令历史** - 查看过去的执行及其结果
+- 🚫 **重复检测** - 自动跳过冗余的 `cd` 命令
+
+### 其他功能
+- 📝 **Notebook 转换** - 将 `.ipynb` 转换为 `.py` 脚本
+- 🔍 **Notebook 检查** - 查看 notebook 结构和元数据
+
+---
+
 ## 📦 Installation
 
 ### From GitHub
@@ -82,6 +148,32 @@ pip install -e .
 ```bash
 pip install requests rich click ipython
 ```
+
+---
+
+## 📦 安装
+
+### 从 GitHub 安装
+
+```bash
+pip install git+https://github.com/ctz168/colabcli.git
+```
+
+### 从源码安装
+
+```bash
+git clone https://github.com/ctz168/colabcli.git
+cd colabcli
+pip install -e .
+```
+
+### 依赖
+
+```bash
+pip install requests rich click ipython
+```
+
+---
 
 ## 🚀 Usage
 
@@ -143,6 +235,71 @@ colabmcp cells notebook.ipynb
 colabmcp convert notebook.ipynb -o script.py
 
 # Interactive REPL
+colabmcp repl
+```
+
+---
+
+## 🚀 使用方法
+
+### 本地运行 Notebook
+
+```bash
+# 基本用法
+colabmcp run notebook.ipynb
+
+# 带选项
+colabmcp run notebook.ipynb --start 5 --end 10 --verbose
+
+# 保存输出到 JSON
+colabmcp run notebook.ipynb -o results.json
+```
+
+### 在远程服务器上运行（Google Colab）
+
+```bash
+# 检查服务器状态
+colabmcp health --url https://aitun.cc/your-code
+
+# 远程执行 notebook（批量模式 - 等待完成）
+colabmcp remote notebook.ipynb --url https://aitun.cc/your-code
+
+# 带超时（适合长时间运行的任务）
+colabmcp remote train_model.ipynb -u https://aitun.cc/your-code -t 3600
+```
+
+### 🆕 实时流式执行（v2.1.0）
+
+非常适合训练、Bot、或持续运行等长时间任务：
+
+```bash
+# 实时流式输出 notebook
+colabmcp stream notebook.ipynb -u https://aitun.cc/your-code
+
+# 只流式执行特定 cell
+colabmcp stream bot.ipynb -u https://aitun.cc/your-code --start 3 --end 4
+
+# 实时监控服务器状态
+colabmcp watch -u https://aitun.cc/your-code -d 300
+```
+
+**何时使用 `stream` 而非 `remote`：**
+- 短任务使用 `remote`（数据处理、快速脚本）
+- 长时间运行的任务使用 `stream`（训练、Bot、服务器）
+
+### 其他命令
+
+```bash
+# 查看 notebook 信息
+colabmcp info notebook.ipynb
+
+# 列出并预览 cell
+colabmcp cells notebook.ipynb
+
+# 转换为 Python 脚本
+colabmcp convert notebook.ipynb -o script.py
+
+# 交互式 REPL
 colabmcp repl
 ```
 
@@ -577,6 +734,25 @@ colabmcp stream notebook.ipynb -u $URL -s 4 -e 6
 | `%time` | `%time func()` | Time execution |
 | `%who` | `%who` | List variables |
 
+---
+
+## 🔧 支持的 IPython Magic 命令
+
+| Magic 命令 | 示例 | 说明 |
+|-----------|------|------|
+| `%cd` | `%cd /content/project` | 切换目录 |
+| `%pwd` | `%pwd` | 打印当前工作目录 |
+| `%env` | `%env`、`%env VAR` | 显示/获取环境变量 |
+| `%set_env` | `%set_env VAR value` | 设置环境变量 |
+| `%pip` | `%pip install package` | 安装 Python 包 |
+| `!cmd` | `!git clone URL` | 执行 shell 命令 |
+| `%%writefile` | `%%writefile file.py` | 将 cell 内容写入文件 |
+| `%%bash` | `%%bash` | 以 bash 脚本运行 cell |
+| `%time` | `%time func()` | 计时执行 |
+| `%who` | `%who` | 列出变量 |
+
+---
+
 ## 📝 Output Example
 
 ### Console Output
@@ -639,6 +815,70 @@ Output Lines    127
 }
 ```
 
+## 📝 输出示例
+
+### 控制台输出
+
+```
+━━━ Cell [0] ━━━
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ print("Hello, World!")                                                       │
+│ for i in range(3):                                                           │
+│     print(f"Count: {i}")                                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+⏳ 运行中...
+Hello, World!
+Count: 0
+Count: 1
+Count: 2
+✅ 完成 (45ms)
+
+━━━ Cell [1] ━━━
+...
+```
+
+### 流式输出（v2.1.0）
+
+```
+━━━ Cell [3] ━━━
+⏳ 流式执行中...
+📌 执行: python main.py --mode telegram
+[Bot] Token: 7983263905:AAFs...
+[Bot] 启动中...
+按 Ctrl+C 停止 Bot
+============================================================
+[心跳] 14:32:15 - 服务运行中 | 目录: /content/stdpbrain
+[Bot] 收到消息: 你好
+[Bot] 回复: 你好！我是类人脑AI...
+[心跳] 14:32:45 - 服务运行中 | 目录: /content/stdpbrain
+...
+⏹️ 执行被用户中断
+
+📊 流式执行摘要:
+总耗时      5m 32.1s
+输出行数    127
+```
+
+### JSON 输出（使用 `-o` 选项）
+
+```json
+{
+  "notebook": "analysis.ipynb",
+  "total_time": 2.345,
+  "results": [
+    {
+      "cell_index": 0,
+      "status": "success",
+      "stdout": "Hello, World!\nCount: 0\nCount: 1\nCount: 2\n",
+      "execution_time": 0.045,
+      "variables": ["data"]
+    }
+  ]
+}
+```
+
+---
+
 ## 🎯 Use Cases
 
 ### Data Analysis Pipeline
@@ -684,6 +924,55 @@ if [ $? -eq 0 ]; then
 fi
 ```
 
+---
+
+## 🎯 使用场景
+
+### 数据分析流水线
+
+```bash
+# 运行数据预处理
+colabmcp run preprocess.ipynb
+
+# 运行分析（跳过前 3 个 cell）
+colabmcp run analysis.ipynb --start 3
+
+# 生成报告
+colabmcp run report.ipynb -o report_output.json
+```
+
+### 远程 GPU 计算
+
+```bash
+# 在 Colab 上部署服务器（GPU 运行时）
+# 然后在本地运行：
+colabmcp remote train_model.ipynb -u https://aitun.cc/your-code -t 3600
+```
+
+### 🆕 长时间运行的 Bot/服务器
+
+```bash
+# 实时流式输出 Bot 运行结果
+colabmcp stream telegram_bot.ipynb -u https://aitun.cc/your-code --start 3
+
+# 在 Bot 运行时监控服务器
+colabmcp watch -u https://aitun.cc/your-code -d 0
+```
+
+### CI/CD 集成
+
+```bash
+# 在 CI 流水线中
+colabmcp run tests.ipynb --continue-on-error -o test_results.json
+
+# 检查退出码
+if [ $? -eq 0 ]; then
+    echo "All tests passed!"
+fi
+```
+
+---
+
 ## 🔧 Architecture
 
 ```
@@ -718,6 +1007,18 @@ This CLI works seamlessly with Google Colab:
 2. **Run all cells** - aitun tunnel starts automatically (no token needed)
 3. **Copy the public URL** and use it with `colabmcp remote` or `colabmcp stream`
 
+---
+
+## 🤝 与 Google Colab 集成
+
+此 CLI 可与 Google Colab 无缝配合：
+
+1. 使用上方徽章在 Colab 中**打开服务器 Notebook**
+2. **运行所有 cell** - aitun 隧道自动启动（无需 token）
+3. **复制公网 URL**，并与 `colabmcp remote` 或 `colabmcp stream` 一起使用
+
+---
+
 ## 📋 Changelog
 
 ### v2.1.0 (Latest)
@@ -744,6 +1045,16 @@ This CLI works seamlessly with Google Colab:
 - **Local execution**: Code runs with your user permissions
 - **Remote execution**: Code runs on the remote server with full access
 - **No authentication**: ColabMCP servers have no built-in auth - keep URLs private
+
+---
+
+## 🔒 安全说明
+
+- **本地执行**：代码以您的用户权限运行
+- **远程执行**：代码在远程服务器上以完全权限运行
+- **无认证**：ColabMCP 服务器没有内置认证 - 请将 URL 保密
+
+---
 
 ## 📄 License
 

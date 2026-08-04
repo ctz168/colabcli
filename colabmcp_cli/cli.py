@@ -31,6 +31,7 @@ from .executor import (
     ExecutionStatus,
     StreamChunk
 )
+from .i18n import t, set_lang, get_lang
 
 
 console = Console()
@@ -83,11 +84,11 @@ class StreamingRunner:
     def _on_cell_start(self, cell: NotebookCell):
         """Handle cell start"""
         if cell.is_code:
-            console.print(f"\n[bold blue]━━━ Cell [{cell.index}] ━━━[/bold blue]")
+            console.print(f"\n[bold blue]{t('cell_header', index=cell.index)}[/bold blue]")
             if self.show_code:
                 syntax = Syntax(cell.source, "python", theme="monokai", line_numbers=False)
                 console.print(Panel(syntax, border_style="blue", padding=(0, 1)))
-            console.print("[dim]⏳ Running...[/dim]")
+            console.print(f"[dim]{t('cell_running')}[/dim]")
 
     def _on_cell_complete(self, cell: NotebookCell, output: CellOutput):
         """Handle cell complete"""
@@ -100,10 +101,10 @@ class StreamingRunner:
 
             # Show timing
             if self.show_timing:
-                console.print(f"[dim]✅ Done ({format_duration(output.execution_time)})[/dim]")
+                console.print(f"[dim]{t('cell_done', duration=format_duration(output.execution_time))}[/dim]")
 
         elif output.status == ExecutionStatus.ERROR:
-            console.print(f"\n[bold red]❌ Error in Cell [{cell.index}]:[/bold red]")
+            console.print(f"\n[bold red]{t('cell_error', index=cell.index)}[/bold red]")
             if output.error:
                 console.print(f"[red]{output.error_type}: {output.error}[/red]")
             if output.traceback and self.verbose:
@@ -113,7 +114,7 @@ class StreamingRunner:
 
         elif output.status == ExecutionStatus.SKIPPED:
             if self.verbose:
-                console.print(f"[dim]⏭️ Skipped[/dim]")
+                console.print(f"[dim]{t('cell_skipped')}[/dim]")
 
         self.results.append(output)
 
@@ -133,12 +134,15 @@ class StreamingRunner:
 
 @click.group(invoke_without_command=True)
 @click.option('--version', '-v', is_flag=True, help='Show version')
+@click.option('--lang', '-l', default=None, help='Language: en (default) or zh')
 @click.pass_context
-def main(ctx, version):
+def main(ctx, version, lang):
     """ColabMCP CLI - Run Jupyter Notebooks with streaming output"""
+    if lang:
+        set_lang(lang)
     if version:
         from . import __version__
-        console.print(f"colabmcp-cli version {__version__}")
+        console.print(t('version', version=__version__))
         return
 
     if ctx.invoked_subcommand is None:
@@ -168,15 +172,15 @@ def run(notebook, start, end, show_code, show_markdown, stop_on_error, verbose, 
 
     # Parse notebook
     notebook_path = Path(notebook)
-    console.print(f"[cyan]📖 Loading notebook: {notebook_path.name}[/cyan]")
+    console.print(f"[cyan]{t('loading_notebook', name=notebook_path.name)}[/cyan]")
 
     try:
         nb = NotebookParser.parse_file(notebook_path)
     except Exception as e:
-        console.print(f"[red]❌ Failed to load notebook: {e}[/red]")
+        console.print(f"[red]{t('failed_load', error=str(e))}[/red]")
         sys.exit(1)
 
-    console.print(f"[green]✓ Found {len(nb.cells)} cells ({len(nb.code_cells)} code cells)[/green]")
+    console.print(f"[green]{t('found_cells', total=len(nb.cells), code=len(nb.code_cells))}[/green]")
 
     # Create engine and runner
     engine = LocalExecutionEngine()
@@ -188,7 +192,7 @@ def run(notebook, start, end, show_code, show_markdown, stop_on_error, verbose, 
     )
 
     # Run notebook
-    console.print(f"\n[bold cyan]🚀 Executing notebook...[/bold cyan]\n")
+    console.print(f"\n[bold cyan]{t('executing')}[/bold cyan]\n")
 
     start_time = time.time()
     results = runner.run(nb, stop_on_error=stop_on_error)
@@ -196,7 +200,7 @@ def run(notebook, start, end, show_code, show_markdown, stop_on_error, verbose, 
 
     # Summary
     console.print(f"\n[bold]{'─' * 50}[/bold]")
-    console.print(f"\n[bold cyan]📊 Execution Summary:[/bold cyan]")
+    console.print(f"\n[bold cyan]{t('execution_summary')}[/bold cyan]")
 
     success_count = sum(1 for r in results if r.status == ExecutionStatus.SUCCESS)
     error_count = sum(1 for r in results if r.status == ExecutionStatus.ERROR)
@@ -205,13 +209,13 @@ def run(notebook, start, end, show_code, show_markdown, stop_on_error, verbose, 
     table = Table(show_header=False, box=None)
     table.add_column("Key", style="cyan")
     table.add_column("Value")
-    table.add_row("Total Time", format_duration(total_time))
-    table.add_row("Cells Executed", str(len(results)))
-    table.add_row("✅ Success", str(success_count))
+    table.add_row(t('total_time'), format_duration(total_time))
+    table.add_row(t('cells_executed'), str(len(results)))
+    table.add_row(t('success'), str(success_count))
     if error_count > 0:
-        table.add_row("❌ Errors", f"[red]{error_count}[/red]")
+        table.add_row(t('errors'), f"[red]{error_count}[/red]")
     if skipped_count > 0:
-        table.add_row("⏭️ Skipped", str(skipped_count))
+        table.add_row(t('skipped'), str(skipped_count))
 
     console.print(table)
 
@@ -224,7 +228,7 @@ def run(notebook, start, end, show_code, show_markdown, stop_on_error, verbose, 
         }
         with open(output, 'w', encoding='utf-8') as f:
             json.dump(output_data, f, indent=2, ensure_ascii=False)
-        console.print(f"\n[green]💾 Output saved to: {output}[/green]")
+        console.print(f"\n[green]{t('output_saved', path=output)}[/green]")
 
     # Exit with error code if there were errors
     if error_count > 0:
@@ -252,27 +256,27 @@ def remote(notebook, url, start, end, show_code, stop_on_error, timeout, verbose
 
     # Parse notebook
     notebook_path = Path(notebook)
-    console.print(f"[cyan]📖 Loading notebook: {notebook_path.name}[/cyan]")
+    console.print(f"[cyan]{t('loading_notebook', name=notebook_path.name)}[/cyan]")
 
     try:
         nb = NotebookParser.parse_file(notebook_path)
     except Exception as e:
-        console.print(f"[red]❌ Failed to load notebook: {e}[/red]")
+        console.print(f"[red]{t('failed_load', error=str(e))}[/red]")
         sys.exit(1)
 
-    console.print(f"[green]✓ Found {len(nb.cells)} cells ({len(nb.code_cells)} code cells)[/green]")
+    console.print(f"[green]{t('found_cells', total=len(nb.cells), code=len(nb.code_cells))}[/green]")
 
     # Create remote engine
-    console.print(f"\n[cyan]🔗 Connecting to: {url}[/cyan]")
+    console.print(f"\n[cyan]{t('connecting', url=url)}[/cyan]")
     engine = RemoteExecutionEngine(url, timeout=timeout)
 
     # Health check
     health = engine.health_check()
     if "error" in health:
-        console.print(f"[red]❌ Failed to connect: {health['error']}[/red]")
+        console.print(f"[red]{t('failed_connect', error=health['error'])}[/red]")
         sys.exit(1)
 
-    console.print(f"[green]✓ Connected! Server uptime: {health.get('uptime_minutes', 'N/A')} min[/green]")
+    console.print(f"[green]{t('connected', uptime=health.get('uptime_minutes', 'N/A'))}[/green]")
 
     # Create runner
     runner = StreamingRunner(
@@ -282,7 +286,7 @@ def remote(notebook, url, start, end, show_code, stop_on_error, timeout, verbose
     )
 
     # Run notebook
-    console.print(f"\n[bold cyan]🚀 Executing notebook remotely...[/bold cyan]\n")
+    console.print(f"\n[bold cyan]{t('executing_remote')}[/bold cyan]\n")
 
     start_time = time.time()
     results = runner.run(nb, stop_on_error=stop_on_error)
@@ -290,7 +294,7 @@ def remote(notebook, url, start, end, show_code, stop_on_error, timeout, verbose
 
     # Summary
     console.print(f"\n[bold]{'─' * 50}[/bold]")
-    console.print(f"\n[bold cyan]📊 Execution Summary:[/bold cyan]")
+    console.print(f"\n[bold cyan]{t('execution_summary')}[/bold cyan]")
 
     success_count = sum(1 for r in results if r.status == ExecutionStatus.SUCCESS)
     error_count = sum(1 for r in results if r.status == ExecutionStatus.ERROR)
@@ -298,11 +302,11 @@ def remote(notebook, url, start, end, show_code, stop_on_error, timeout, verbose
     table = Table(show_header=False, box=None)
     table.add_column("Key", style="cyan")
     table.add_column("Value")
-    table.add_row("Total Time", format_duration(total_time))
-    table.add_row("Cells Executed", str(len(results)))
-    table.add_row("✅ Success", str(success_count))
+    table.add_row(t('total_time'), format_duration(total_time))
+    table.add_row(t('cells_executed'), str(len(results)))
+    table.add_row(t('success'), str(success_count))
     if error_count > 0:
-        table.add_row("❌ Errors", f"[red]{error_count}[/red]")
+        table.add_row(t('errors'), f"[red]{error_count}[/red]")
 
     console.print(table)
 
@@ -323,12 +327,12 @@ def convert(notebook, output):
     print_banner()
 
     notebook_path = Path(notebook)
-    console.print(f"[cyan]📖 Converting: {notebook_path.name}[/cyan]")
+    console.print(f"[cyan]{t('converting', name=notebook_path.name)}[/cyan]")
 
     try:
         nb = NotebookParser.parse_file(notebook_path)
     except Exception as e:
-        console.print(f"[red]❌ Failed to load notebook: {e}[/red]")
+        console.print(f"[red]{t('failed_load', error=str(e))}[/red]")
         sys.exit(1)
 
     # Extract code
@@ -344,7 +348,7 @@ def convert(notebook, output):
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(code)
 
-    console.print(f"[green]✓ Converted to: {output_path}[/green]")
+    console.print(f"[green]{t('converted_to', path=output_path)}[/green]")
 
 
 @main.command()
@@ -359,40 +363,40 @@ def info(notebook):
     print_banner()
 
     notebook_path = Path(notebook)
-    console.print(f"[cyan]📖 Analyzing: {notebook_path.name}[/cyan]\n")
+    console.print(f"[cyan]{t('analyzing', name=notebook_path.name)}[/cyan]\n")
 
     try:
         nb = NotebookParser.parse_file(notebook_path)
     except Exception as e:
-        console.print(f"[red]❌ Failed to load notebook: {e}[/red]")
+        console.print(f"[red]{t('failed_load', error=str(e))}[/red]")
         sys.exit(1)
 
     # Notebook info table
-    table = Table(title="Notebook Information", show_header=False)
+    table = Table(title=t('notebook_info'), show_header=False)
     table.add_column("Key", style="cyan")
     table.add_column("Value")
 
-    table.add_row("Path", str(nb.path))
-    table.add_row("Format", f"nbformat {nb.nbformat}.{nb.nbformat_minor}")
-    table.add_row("Total Cells", str(len(nb.cells)))
-    table.add_row("Code Cells", str(len(nb.code_cells)))
-    table.add_row("Markdown Cells", str(len(nb.markdown_cells)))
+    table.add_row(t('path'), str(nb.path))
+    table.add_row(t('format'), f"nbformat {nb.nbformat}.{nb.nbformat_minor}")
+    table.add_row(t('total_cells'), str(len(nb.cells)))
+    table.add_row(t('code_cells'), str(len(nb.code_cells)))
+    table.add_row(t('markdown_cells'), str(len(nb.markdown_cells)))
 
     # Kernel info
     kernel = nb.metadata.get('kernelspec', {})
     if kernel:
-        table.add_row("Kernel", kernel.get('display_name', 'Unknown'))
-        table.add_row("Language", kernel.get('language', 'Unknown'))
+        table.add_row(t('kernel'), kernel.get('display_name', t('unknown')))
+        table.add_row(t('language'), kernel.get('language', t('unknown')))
 
     console.print(table)
 
     # Cell list
     if nb.cells:
-        console.print("\n[bold]Cell Overview:[/bold]\n")
+        console.print(f"\n[bold]{t('cell_overview')}[/bold]\n")
 
         cell_table = Table(show_header=True, header_style="bold cyan")
         cell_table.add_column("#", justify="right", width=4)
-        cell_table.add_column("Type", width=10)
+        cell_table.add_column(t('path'), width=10)
         cell_table.add_column("Lines", justify="right", width=6)
         cell_table.add_column("Preview")
 
@@ -417,7 +421,7 @@ def info(notebook):
         tags.update(cell_tags)
 
     if tags:
-        console.print(f"\n[bold]Tags found:[/bold] {', '.join(sorted(tags))}")
+        console.print(f"\n[bold]{t('tags_found', tags=', '.join(sorted(tags)))}[/bold]")
 
 
 @main.command()
@@ -436,12 +440,12 @@ def cells(notebook, start, end, verbose):
     print_banner()
 
     notebook_path = Path(notebook)
-    console.print(f"[cyan]📖 Reading: {notebook_path.name}[/cyan]\n")
+    console.print(f"[cyan]{t('reading', name=notebook_path.name)}[/cyan]\n")
 
     try:
         nb = NotebookParser.parse_file(notebook_path)
     except Exception as e:
-        console.print(f"[red]❌ Failed to load notebook: {e}[/red]")
+        console.print(f"[red]{t('failed_load', error=str(e))}[/red]")
         sys.exit(1)
 
     cells_to_show = nb.cells[start:end]
@@ -450,7 +454,7 @@ def cells(notebook, start, end, verbose):
         # Header
         cell_type_emoji = "📝" if cell.is_markdown else "🐍"
         console.print(f"\n[bold blue]{'─' * 50}[/bold blue]")
-        console.print(f"[bold]{cell_type_emoji} Cell [{cell.index}] - {cell.cell_type.value}[/bold]")
+        console.print(f"[bold]{cell_type_emoji} {t('cell_header', index=cell.index)} - {cell.cell_type.value}[/bold]")
 
         # Metadata
         if verbose and cell.metadata:
@@ -467,7 +471,7 @@ def cells(notebook, start, end, verbose):
             console.print(cell.source)
 
     console.print(f"\n[bold]{'─' * 50}[/bold]")
-    console.print(f"\n[cyan]Total: {len(cells_to_show)} cells shown[/cyan]")
+    console.print(f"\n[cyan]{t('total_shown', total=len(cells_to_show))}[/cyan]")
 
 
 @main.command()
@@ -481,40 +485,40 @@ def health(url):
     """
     print_banner()
 
-    console.print(f"[cyan]🔍 Checking server: {url}[/cyan]\n")
+    console.print(f"[cyan]{t('health_checking', url=url)}[/cyan]\n")
 
     engine = RemoteExecutionEngine(url)
     result = engine.health_check()
 
     if "error" in result:
-        console.print(f"[red]❌ Connection failed: {result['error']}[/red]")
+        console.print(f"[red]{t('connection_failed', error=result['error'])}[/red]")
         sys.exit(1)
 
     # Display health info
-    table = Table(title="Server Health", show_header=False)
+    table = Table(title=t('server_health'), show_header=False)
     table.add_column("Key", style="cyan")
     table.add_column("Value")
 
-    table.add_row("Status", f"[green]{result.get('status', 'unknown')}[/green]")
-    table.add_row("Uptime", f"{result.get('uptime_minutes', 'N/A')} minutes")
-    table.add_row("Memory Available", f"{result.get('memory_available_gb', 'N/A')} GB")
-    table.add_row("Memory Total", f"{result.get('memory_total_gb', 'N/A')} GB")
-    table.add_row("Memory Used", f"{result.get('memory_used_pct', 'N/A')}%")
-    table.add_row("GPU Available", "✅ Yes" if result.get('gpu_available') else "❌ No")
+    table.add_row(t('status'), f"[green]{result.get('status', t('unknown'))}[/green]")
+    table.add_row(t('uptime'), f"{result.get('uptime_minutes', 'N/A')} minutes")
+    table.add_row(t('memory_available'), f"{result.get('memory_available_gb', 'N/A')} GB")
+    table.add_row(t('memory_total'), f"{result.get('memory_total_gb', 'N/A')} GB")
+    table.add_row(t('memory_used'), f"{result.get('memory_used_pct', 'N/A')}%")
+    table.add_row(t('gpu_available'), t('yes') if result.get('gpu_available') else t('no'))
 
     console.print(table)
 
     # Probe environment
-    console.print(f"\n[cyan]🔍 Probing environment...[/cyan]\n")
+    console.print(f"\n[cyan]{t('probing_environment')}[/cyan]\n")
 
     probe = engine.probe_environment()
     if "error" not in probe:
-        console.print(f"[dim]Python: {probe.get('python_version', 'N/A')[:60]}...[/dim]")
-        console.print(f"[dim]Total packages: {probe.get('total_packages', 'N/A')}[/dim]")
+        console.print(f"[dim]{t('python', version=probe.get('python_version', 'N/A')[:60])}...[/dim]")
+        console.print(f"[dim]{t('total_packages', count=probe.get('total_packages', 'N/A'))}[/dim]")
 
         gpu_info = probe.get('gpu_info', '')
         if gpu_info and 'No GPU' not in gpu_info:
-            console.print(f"\n[bold]🎮 GPU Info:[/bold]")
+            console.print(f"\n[bold]{t('gpu_info')}[/bold]")
             for line in gpu_info.strip().split('\n')[:5]:
                 console.print(f"  [dim]{line}[/dim]")
 
@@ -529,15 +533,15 @@ def repl():
     """
     print_banner()
 
-    console.print("[bold]Interactive Python REPL[/bold]")
-    console.print("[dim]Type 'exit' or press Ctrl+D to exit[/dim]\n")
+    console.print(f"[bold]{t('repl_title')}[/bold]")
+    console.print(f"[dim]{t('repl_exit_hint')}[/dim]\n")
 
     engine = LocalExecutionEngine()
 
     while True:
         try:
             # Read multi-line input
-            console.print("[bold cyan]>>>[/bold cyan] ", end='')
+            console.print(f"[bold cyan]{t('repl_prompt')}[/bold cyan] ", end='')
             lines = []
             while True:
                 try:
@@ -557,7 +561,7 @@ def repl():
             code = '\n'.join(lines)
 
             if code.strip().lower() in ('exit', 'quit', 'q'):
-                console.print("\n[green]👋 Goodbye![/green]")
+                console.print(f"\n[green]{t('goodbye')}[/green]")
                 break
 
             if not code.strip():
@@ -581,10 +585,10 @@ def repl():
                 console.print(f"[red]{output.error_type}: {output.error}[/red]")
 
         except KeyboardInterrupt:
-            console.print("\n[red]Interrupted[/red]")
+            console.print(f"\n[red]{t('interrupted')}[/red]")
             continue
         except EOFError:
-            console.print("\n[green]👋 Goodbye![/green]")
+            console.print(f"\n[green]{t('goodbye')}[/green]")
             break
 
 
@@ -600,18 +604,18 @@ def interrupt(url):
     """
     print_banner()
 
-    console.print(f"[yellow]⏹️ Interrupting execution on: {url}[/yellow]\n")
+    console.print(f"[yellow]{t('interrupting_exec', url=url)}[/yellow]\n")
 
     engine = RemoteExecutionEngine(url)
     result = engine.interrupt()
 
     if result.get("success"):
-        console.print(f"[green]✅ 执行已中断[/green]")
+        console.print(f"[green]{t('exec_interrupted')}[/green]")
         if result.get("message"):
             console.print(f"[dim]{result['message']}[/dim]")
     else:
-        error = result.get("error", "Unknown error")
-        console.print(f"[red]❌ 中断失败: {error}[/red]")
+        error = result.get("error", t('unknown_error'))
+        console.print(f"[red]{t('interrupt_failed', error=error)}[/red]")
         sys.exit(1)
 
 
@@ -627,31 +631,31 @@ def status(url):
     """
     print_banner()
 
-    console.print(f"[cyan]📊 Getting status from: {url}[/cyan]\n")
+    console.print(f"[cyan]{t('getting_status', url=url)}[/cyan]\n")
 
     engine = RemoteExecutionEngine(url)
     result = engine.get_status()
 
     if "error" in result:
-        console.print(f"[red]❌ 获取状态失败: {result['error']}[/red]")
+        console.print(f"[red]{t('get_status_failed', error=result['error'])}[/red]")
         sys.exit(1)
 
     # Display status info
-    table = Table(title="Server Status", show_header=False)
+    table = Table(title=t('server_status'), show_header=False)
     table.add_column("Key", style="cyan")
     table.add_column("Value")
 
-    table.add_row("Is Executing", "🔄 Yes" if result.get("is_executing") else "✅ No")
-    table.add_row("Current Directory", result.get("current_directory", "N/A"))
-    table.add_row("Last Command", result.get("last_command", "N/A")[:80])
-    table.add_row("Last Execution Time", f"{result.get('last_execution_time', 0):.2f}s")
+    table.add_row(t('is_executing'), "🔄 Yes" if result.get("is_executing") else "✅ No")
+    table.add_row(t('current_directory'), result.get("current_directory", "N/A"))
+    table.add_row(t('last_command'), result.get("last_command", "N/A")[:80])
+    table.add_row(t('last_execution_time'), f"{result.get('last_execution_time', 0):.2f}s")
 
     console.print(table)
 
     # Show recent history
     history = result.get("recent_history", [])
     if history:
-        console.print(f"\n[bold]📜 Recent Commands:[/bold]\n")
+        console.print(f"\n[bold]{t('recent_commands')}[/bold]\n")
         for i, cmd in enumerate(history[-5:]):
             console.print(f"  [dim]{i+1}.[/dim] {cmd[:100]}{'...' if len(cmd) > 100 else ''}")
 
@@ -669,27 +673,27 @@ def history(url, limit):
     """
     print_banner()
 
-    console.print(f"[cyan]📜 Getting history from: {url}[/cyan]\n")
+    console.print(f"[cyan]{t('getting_history', url=url)}[/cyan]\n")
 
     engine = RemoteExecutionEngine(url)
     result = engine.get_history(limit=limit)
 
     if "error" in result:
-        console.print(f"[red]❌ 获取历史失败: {result['error']}[/red]")
+        console.print(f"[red]{t('history_failed', error=result['error'])}[/red]")
         sys.exit(1)
 
     history_entries = result.get("history", [])
     if not history_entries:
-        console.print("[dim]No command history found.[/dim]")
+        console.print(f"[dim]{t('no_command_history')}[/dim]")
         return
 
-    console.print(f"[bold]Command History ({len(history_entries)} entries):[/bold]\n")
+    console.print(f"[bold]{t('command_history', count=len(history_entries))}[/bold]\n")
 
     table = Table(show_header=True, header_style="bold cyan")
     table.add_column("#", justify="right", width=4)
-    table.add_column("Time", width=10)
-    table.add_column("Directory", width=20)
-    table.add_column("Command Preview")
+    table.add_column(t('time'), width=10)
+    table.add_column(t('directory'), width=20)
+    table.add_column(t('command_preview'))
 
     for i, entry in enumerate(history_entries):
         timestamp = entry.get("timestamp", "")
@@ -729,43 +733,43 @@ def stream(notebook, url, start, end, timeout, verbose):
 
     # Parse notebook
     notebook_path = Path(notebook)
-    console.print(f"[cyan]📖 Loading notebook: {notebook_path.name}[/cyan]")
+    console.print(f"[cyan]{t('loading_notebook', name=notebook_path.name)}[/cyan]")
 
     try:
         nb = NotebookParser.parse_file(notebook_path)
     except Exception as e:
-        console.print(f"[red]❌ Failed to load notebook: {e}[/red]")
+        console.print(f"[red]{t('failed_load', error=str(e))}[/red]")
         sys.exit(1)
 
     code_cells = [c for c in nb.cells[start:end] if c.is_code]
-    console.print(f"[green]✓ Found {len(nb.cells)} cells ({len(code_cells)} code cells to stream)[/green]")
+    console.print(f"[green]{t('found_cells_stream', total=len(nb.cells), code=len(code_cells))}[/green]")
 
     # Create remote engine
-    console.print(f"\n[cyan]🔗 Connecting to: {url}[/cyan]")
+    console.print(f"\n[cyan]{t('connecting', url=url)}[/cyan]")
     engine = RemoteExecutionEngine(url, timeout=timeout)
 
     # Health check
     health = engine.health_check()
     if "error" in health:
-        console.print(f"[red]❌ Failed to connect: {health['error']}[/red]")
+        console.print(f"[red]{t('failed_connect', error=health['error'])}[/red]")
         sys.exit(1)
 
-    console.print(f"[green]✓ Connected! Server uptime: {health.get('uptime_minutes', 'N/A')} min[/green]")
+    console.print(f"[green]{t('connected', uptime=health.get('uptime_minutes', 'N/A'))}[/green]")
 
     # Stream each cell
-    console.print(f"\n[bold cyan]🚀 Starting streaming execution...[/bold cyan]")
-    console.print(f"[dim]Press Ctrl+C to interrupt[/dim]\n")
+    console.print(f"\n[bold cyan]{t('executing_stream')}[/bold cyan]")
+    console.print(f"[dim]{t('press_ctrl_c')}[/dim]\n")
 
     start_time = time.time()
     total_outputs = 0
 
     for cell in code_cells:
-        console.print(f"\n[bold blue]━━━ Cell [{cell.index}] ━━━[/bold blue]")
+        console.print(f"\n[bold blue]{t('cell_header', index=cell.index)}[/bold blue]")
         if verbose:
             syntax = Syntax(cell.source, "python", theme="monokai", line_numbers=False)
             console.print(Panel(syntax, border_style="blue", padding=(0, 1)))
         
-        console.print("[dim]⏳ Streaming...[/dim]")
+        console.print(f"[dim]{t('cell_streaming')}[/dim]")
 
         try:
             for msg in engine.execute_streaming(cell):
@@ -787,13 +791,13 @@ def stream(notebook, url, start, end, timeout, verbose):
                     console.print(f"[dim]⏭️ {content}[/dim]")
                     
         except KeyboardInterrupt:
-            console.print("\n[yellow]⚠️ Interrupting...[/yellow]")
+            console.print(f"\n[yellow]{t('interrupting')}[/yellow]")
             # Send interrupt to server
             engine.interrupt()
-            console.print("[yellow]⏹️ Execution interrupted by user[/yellow]")
+            console.print(f"[yellow]{t('interrupted_by_user')}[/yellow]")
             break
         except Exception as e:
-            console.print(f"\n[red]❌ Error: {e}[/red]")
+            console.print(f"\n[red]{t('stream_error', error=str(e))}[/red]")
             if verbose:
                 console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
@@ -801,13 +805,13 @@ def stream(notebook, url, start, end, timeout, verbose):
 
     # Summary
     console.print(f"\n[bold]{'─' * 50}[/bold]")
-    console.print(f"\n[bold cyan]📊 Streaming Summary:[/bold cyan]")
+    console.print(f"\n[bold cyan]{t('stream_summary')}[/bold cyan]")
 
     table = Table(show_header=False, box=None)
     table.add_column("Key", style="cyan")
     table.add_column("Value")
-    table.add_row("Total Time", format_duration(total_time))
-    table.add_row("Output Lines", str(total_outputs))
+    table.add_row(t('total_time'), format_duration(total_time))
+    table.add_row(t('output_lines'), str(total_outputs))
 
     console.print(table)
 
@@ -827,8 +831,8 @@ def watch(url, duration):
     """
     print_banner()
     
-    console.print(f"[cyan]👀 Watching server: {url}[/cyan]")
-    console.print(f"[dim]Duration: {duration}s (0 = infinite)[/dim]\n")
+    console.print(f"[cyan]{t('watching_server', url=url)}[/cyan]")
+    console.print(f"[dim]{t('duration', duration=duration)}[/dim]\n")
 
     engine = RemoteExecutionEngine(url)
     start_time = time.time()
@@ -838,18 +842,18 @@ def watch(url, duration):
         while True:
             elapsed = time.time() - start_time
             if duration > 0 and elapsed > duration:
-                console.print("\n[yellow]⏰ Watch duration reached[/yellow]")
+                console.print(f"\n[yellow]{t('watch_duration_reached')}[/yellow]")
                 break
 
             status = engine.get_status()
             if "error" in status:
-                console.print(f"[red]❌ Error: {status['error']}[/red]")
+                console.print(f"[red]{t('watch_error', error=status['error'])}[/red]")
                 time.sleep(5)
                 continue
 
             # Build status line
             is_exec = status.get("is_executing", False)
-            exec_status = "🔄 Running" if is_exec else "✅ Idle"
+            exec_status = t('watch_running') if is_exec else t('watch_idle')
             cwd = status.get("current_directory", "/content")
             last_cmd = status.get("last_command", "")[:50]
             
@@ -865,7 +869,7 @@ def watch(url, duration):
             time.sleep(2)
             
     except KeyboardInterrupt:
-        console.print("\n\n[yellow]👋 Watch stopped[/yellow]")
+        console.print(f"\n\n[yellow]{t('watch_stopped')}[/yellow]")
 
 
 if __name__ == '__main__':

@@ -14,6 +14,85 @@ from datetime import datetime
 from flask import Flask, request, jsonify, Response
 import psutil
 
+# ============== i18n ==============
+_LANG = os.environ.get('COLABMCP_LANG', 'en').lower()
+if _LANG not in ('en', 'zh'):
+    _LANG = 'en'
+
+def t(key, **kwargs):
+    """Get translated string by key, with optional format arguments."""
+    translations = {
+        'en': {
+            'server_starting': '🚀 ColabCLI server starting...',
+            'server_version': 'Version: {version}',
+            'server_features': 'Features: {features}',
+            'server_optimization': 'Optimization: {optimization}',
+            'server_stopped': 'Stop signal received, shutting down...',
+            'server_internal_error': 'Internal server error: {error}',
+            'server_start_failed': '[Error] Flask failed to start: {error}',
+            'no_code_provided': 'No code provided',
+            'execution_interrupted': 'Execution interrupted by user',
+            'execution_interrupted_msg': '⚠️ Execution interrupted by user',
+            'interrupt_sent': 'Interrupt signal sent',
+            'interrupt_failed_msg': 'Interrupt failed, please try again later',
+            'interrupt_processed': 'Interrupt request processed',
+            'no_running_task': 'No running task',
+            'user_interrupt': 'User interrupt',
+            'server_busy': 'Another code is executing, please try again later',
+            'executing_shell': 'Executing: {cmd}',
+            'executing_python': 'Executing Python code...',
+            'complete_shell': '✅ Done (exit code: {code}, time: {time}s)',
+            'complete_python': '✅ Done (time: {time}s)',
+            'error_prefix': '❌ Error: {error}',
+            'interrupt_history': 'Interrupted',
+            'signal_received': '[Signal] Stop signal received, shutting down...',
+            'interrupt_attempt_failed': '[Interrupt] Failed to interrupt: {error}',
+            'heartbeat': '[Heartbeat] {time} - Running | Directory: {directory}{exec_flag}',
+            'heartbeat_error': '[Heartbeat Error] {error}',
+            'interrupt_flag': ' [Executing]',
+            'gpu_no_available': 'No GPU available',
+            'memory_cleaned': 'Memory cleaned',
+        },
+        'zh': {
+            'server_starting': '🚀 ColabCLI 服务器启动中...',
+            'server_version': '版本: {version}',
+            'server_features': '功能: {features}',
+            'server_optimization': '优化: {optimization}',
+            'server_stopped': '收到停止信号，正在关闭...',
+            'server_internal_error': '服务器内部错误: {error}',
+            'server_start_failed': '[错误] Flask 启动失败: {error}',
+            'no_code_provided': '未提供代码',
+            'execution_interrupted': '执行被用户中断',
+            'execution_interrupted_msg': '⚠️ 执行被用户中断',
+            'interrupt_sent': '已发送中断信号',
+            'interrupt_failed_msg': '中断失败，请稍后重试',
+            'interrupt_processed': '中断请求已处理',
+            'no_running_task': '当前没有正在执行的任务',
+            'user_interrupt': '用户中断',
+            'server_busy': '另一个代码正在执行中，请稍后重试',
+            'executing_shell': '执行: {cmd}',
+            'executing_python': '执行 Python 代码...',
+            'complete_shell': '✅ 完成 (退出码: {code}, 耗时: {time}s)',
+            'complete_python': '✅ 完成 (耗时: {time}s)',
+            'error_prefix': '❌ 错误: {error}',
+            'interrupt_history': '中断',
+            'signal_received': '[信号] 收到停止信号，正在关闭...',
+            'interrupt_attempt_failed': '[中断] 尝试中断失败: {error}',
+            'heartbeat': '[心跳] {time} - 运行中 | 目录: {directory}{exec_flag}',
+            'heartbeat_error': '[心跳错误] {error}',
+            'interrupt_flag': ' [执行中]',
+            'gpu_no_available': '无可用 GPU',
+            'memory_cleaned': '内存已清理',
+        },
+    }
+    template = translations.get(_LANG, translations['en']).get(key, key)
+    if kwargs:
+        try:
+            return template.format(**kwargs)
+        except (KeyError, IndexError):
+            return template
+    return template
+
 # ============== 全局状态 ==============
 runtime_variables = {}
 start_time = time.time()
@@ -51,8 +130,8 @@ def heartbeat_thread():
         try:
             current_time = time.strftime("%H:%M:%S")
             is_exec = execution_state['is_executing']
-            exec_flag = " [执行中]" if is_exec else ""
-            print(f"[心跳] {current_time} - 运行中 | 目录: {execution_state['current_directory']}{exec_flag}", flush=True)
+            exec_flag = t('interrupt_flag') if is_exec else ""
+            print(t('heartbeat', time=current_time, directory=execution_state['current_directory'], exec_flag=exec_flag), flush=True)
 
             # 不再请求 /health 端点，避免与执行锁冲突
             # Colab 自身有保活机制，只需打印日志即可
@@ -60,7 +139,7 @@ def heartbeat_thread():
 
             time.sleep(60)  # 30→60秒，减少心跳频率
         except Exception as e:
-            print(f"[心跳错误] {e}", flush=True)
+            print(t('heartbeat_error', error=str(e)), flush=True)
             time.sleep(30)
 
 # ============== 辅助函数 ==============
@@ -109,7 +188,7 @@ def _interrupt_thread(thread):
                     ctypes.py_object(exc)
                 )
         except Exception as e:
-            print(f"[中断] 尝试中断失败: {e}", flush=True)
+            print(t('interrupt_attempt_failed', error=str(e)), flush=True)
     return True
 
 # ============== API Endpoints ==============
@@ -167,7 +246,7 @@ def interrupt_execution():
     global interrupt_requested, current_execution_thread
 
     if not execution_state["is_executing"]:
-        return jsonify({"success": True, "message": "当前没有正在执行的任务"})
+        return jsonify({"success": True, "message": t('no_running_task')})
 
     interrupt_requested = True
 
@@ -175,12 +254,12 @@ def interrupt_execution():
         success = _interrupt_thread(current_execution_thread)
         if success:
             execution_state["is_executing"] = False
-            execution_state["last_error"] = "用户中断"
-            return jsonify({"success": True, "message": "已发送中断信号"})
+            execution_state["last_error"] = t('user_interrupt')
+            return jsonify({"success": True, "message": t('interrupt_sent')})
         else:
-            return jsonify({"success": False, "message": "中断失败，请稍后重试"})
+            return jsonify({"success": False, "message": t('interrupt_failed_msg')})
 
-    return jsonify({"success": True, "message": "中断请求已处理"})
+    return jsonify({"success": True, "message": t('interrupt_processed')})
 
 @app.route('/probe', methods=['GET'])
 def probe_environment():
@@ -190,7 +269,7 @@ def probe_environment():
                               capture_output=True, text=True, timeout=10)
         gpu_info = result.stdout
     except:
-        gpu_info = "No GPU available"
+        gpu_info = t('gpu_no_available')
 
     installed_packages = []
     try:
@@ -219,7 +298,7 @@ def execute_code():
     global current_execution_thread, interrupt_requested
 
     if not execution_lock.acquire(blocking=False):
-        return jsonify({"success": False, "error": "另一个代码正在执行中，请稍后重试"})
+        return jsonify({"success": False, "error": t('server_busy')})
 
     interrupt_requested = False
     current_execution_thread = threading.current_thread()
@@ -248,12 +327,12 @@ def execute_code():
 
         try:
             if interrupt_requested:
-                raise KeyboardInterrupt("执行被用户中断")
+                raise KeyboardInterrupt(t('execution_interrupted'))
 
             exec(code, exec_globals, exec_locals)
 
             if interrupt_requested:
-                raise KeyboardInterrupt("执行被用户中断")
+                raise KeyboardInterrupt(t('execution_interrupted'))
 
             for key, value in exec_locals.items():
                 if not key.startswith('_'):
@@ -282,10 +361,10 @@ def execute_code():
         except KeyboardInterrupt:
             stdout_val = captured_stdout.getvalue()
             _add_to_history(code, stdout_val, success=False)
-            execution_state["last_error"] = "用户中断"
+            execution_state["last_error"] = t('user_interrupt')
             return jsonify({
                 "success": False,
-                "error": "执行被用户中断",
+                "error": t('execution_interrupted'),
                 "error_type": "KeyboardInterrupt",
                 "stdout": stdout_val,
                 "stderr": captured_stderr.getvalue(),
@@ -315,7 +394,7 @@ def execute_code():
         execution_state["is_executing"] = False
         return jsonify({
             "success": False,
-            "error": f"服务器内部错误: {str(e)}",
+            "error": t('server_internal_error', error=str(e)),
             "error_type": type(e).__name__,
             "traceback": traceback.format_exc()
         })
@@ -378,7 +457,7 @@ def execute_code_stream():
         def run_shell_command():
             global stream_active
             start_time = time.time()
-            stream_output_queue.put({"type": "status", "content": f"执行: {shell_cmd}"})
+            stream_output_queue.put({"type": "status", "content": t('executing_shell', cmd=shell_cmd)})
 
             try:
                 process = subprocess.Popen(
@@ -396,7 +475,7 @@ def execute_code_stream():
                 while True:
                     if interrupt_requested:
                         process.terminate()
-                        stream_output_queue.put({"type": "error", "content": "执行被用户中断"})
+                        stream_output_queue.put({"type": "error", "content": t('execution_interrupted')})
                         break
 
                     # 检查进程是否结束
@@ -425,7 +504,7 @@ def execute_code_stream():
                 elapsed = time.time() - start_time
                 stream_output_queue.put({
                     "type": "complete",
-                    "content": f"✅ 完成 (退出码: {process.returncode}, 耗时: {elapsed:.2f}s)"
+                    "content": t('complete_shell', code=process.returncode, time=f"{elapsed:.2f}")
                 })
                 _add_to_history(code, f"shell: {shell_cmd}", success=True)
                 execution_state["last_execution_time"] = elapsed
@@ -464,7 +543,7 @@ def execute_code_stream():
         def run_python_code():
             global stream_active
             start_time = time.time()
-            stream_output_queue.put({"type": "status", "content": "执行 Python 代码..."})
+            stream_output_queue.put({"type": "status", "content": t('executing_python')})
 
             old_stdout = sys.stdout
             old_stderr = sys.stderr
@@ -478,12 +557,12 @@ def execute_code_stream():
 
             try:
                 if interrupt_requested:
-                    raise KeyboardInterrupt("执行被用户中断")
+                    raise KeyboardInterrupt(t('execution_interrupted'))
 
                 exec(code, exec_globals, exec_locals)
 
                 if interrupt_requested:
-                    raise KeyboardInterrupt("执行被用户中断")
+                    raise KeyboardInterrupt(t('execution_interrupted'))
 
                 # 保存变量
                 for key, value in exec_locals.items():
@@ -497,19 +576,19 @@ def execute_code_stream():
                 elapsed = time.time() - start_time
                 stream_output_queue.put({
                     "type": "complete",
-                    "content": f"✅ 完成 (耗时: {elapsed:.2f}s)",
+                    "content": t('complete_python', time=f"{elapsed:.2f}"),
                     "variables": list(exec_locals.keys())
                 })
                 _add_to_history(code, ''.join(stdout_capture.buffer)[:200], success=True)
                 execution_state["last_execution_time"] = elapsed
 
             except KeyboardInterrupt:
-                stream_output_queue.put({"type": "error", "content": "⚠️ 执行被用户中断"})
-                _add_to_history(code, "中断", success=False)
+                stream_output_queue.put({"type": "error", "content": t('execution_interrupted_msg')})
+                _add_to_history(code, t('interrupt_history'), success=False)
             except Exception as e:
                 stream_output_queue.put({
                     "type": "error",
-                    "content": f"❌ 错误: {type(e).__name__}: {str(e)}"
+                    "content": t('error_prefix', error=f"{type(e).__name__}: {str(e)}")
                 })
                 _add_to_history(code, str(e), success=False)
             finally:
@@ -590,13 +669,13 @@ def cleanup():
     mem = psutil.virtual_memory()
     return jsonify({
         "success": True,
-        "message": "Memory cleaned",
+        "message": t('memory_cleaned'),
         "memory_available_gb": round(mem.available / (1024**3), 2)
     })
 
 def signal_handler(sig, frame):
     global keep_running
-    print("\n[信号] 收到停止信号，正在关闭...")
+    print("\n" + t('signal_received'))
     keep_running = False
     sys.exit(0)
 
@@ -605,11 +684,11 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
 
     print("\n" + "="*60)
-    print("🚀 ColabCLI 服务器启动中...")
+    print(t('server_starting'))
     print("="*60)
-    print("版本: 2.2.0")
-    print("功能: 心跳保活 + 错误隔离 + 中断支持 + 状态跟踪 + 流式输出")
-    print("优化: 长任务稳定支持 + 心跳不干扰执行 + 600s超时")
+    print(t('server_version', version='2.2.0'))
+    print(t('server_features', features='Heartbeat + Error isolation + Interrupt + Status tracking + SSE streaming'))
+    print(t('server_optimization', optimization='Long-task stability + Non-blocking heartbeat + 600s timeout'))
     print("="*60 + "\n")
 
     heartbeat = threading.Thread(target=heartbeat_thread, daemon=True)
@@ -618,5 +697,5 @@ if __name__ == '__main__':
     try:
         app.run(port=5000, host='0.0.0.0', threaded=True)
     except Exception as e:
-        print(f"[错误] Flask 启动失败: {e}")
+        print(t('server_start_failed', error=str(e)))
         raise
