@@ -118,13 +118,16 @@ class StreamingRunner:
 
         self.results.append(output)
 
-    def run(self, notebook: Notebook, stop_on_error: bool = True) -> list:
+    def run(self, notebook: Notebook, stop_on_error: bool = True,
+            start_cell: int = 0, end_cell: Optional[int] = None) -> list:
         """Run the notebook"""
         self.engine.stop_on_error = stop_on_error
         self.results = []
 
         for output in self.engine.execute_notebook(
             notebook,
+            start_cell=start_cell,
+            end_cell=end_cell,
             skip_markdown=not self.show_markdown
         ):
             pass  # Callbacks handle output
@@ -195,7 +198,7 @@ def run(notebook, start, end, show_code, show_markdown, stop_on_error, verbose, 
     console.print(f"\n[bold cyan]{t('executing')}[/bold cyan]\n")
 
     start_time = time.time()
-    results = runner.run(nb, stop_on_error=stop_on_error)
+    results = runner.run(nb, stop_on_error=stop_on_error, start_cell=start, end_cell=end)
     total_time = time.time() - start_time
 
     # Summary
@@ -289,7 +292,7 @@ def remote(notebook, url, start, end, show_code, stop_on_error, timeout, verbose
     console.print(f"\n[bold cyan]{t('executing_remote')}[/bold cyan]\n")
 
     start_time = time.time()
-    results = runner.run(nb, stop_on_error=stop_on_error)
+    results = runner.run(nb, stop_on_error=stop_on_error, start_cell=start, end_cell=end)
     total_time = time.time() - start_time
 
     # Summary
