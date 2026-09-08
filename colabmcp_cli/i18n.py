@@ -97,6 +97,7 @@ TRANSLATIONS = {
         'output_lines': 'Output Lines',
         'press_ctrl_c': 'Press Ctrl+C to interrupt',
         'stream_error': '❌ Error: {error}',
+        'stream_stopped_on_error': '🛑 Stopping further cells (stop-on-error; use --continue-on-error to override)',
 
         # ============ Status / Interrupt ============
         'interrupting_exec': '⏹️ Interrupting execution on: {url}',
@@ -253,6 +254,7 @@ TRANSLATIONS = {
         'output_lines': '输出行数',
         'press_ctrl_c': '按 Ctrl+C 中断',
         'stream_error': '❌ 错误: {error}',
+        'stream_stopped_on_error': '🛑 已停止执行后续 cell（stop-on-error；可用 --continue-on-error 跳过此行为）',
 
         # ============ 状态/中断 ============
         'interrupting_exec': '⏹️ 正在中断执行: {url}',

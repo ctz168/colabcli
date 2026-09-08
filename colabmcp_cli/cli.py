@@ -721,7 +721,8 @@ def history(url, limit):
 @click.option('--end', '-e', default=None, type=int, help='End at cell index (exclusive)')
 @click.option('--timeout', '-t', default=600, help='Timeout in seconds for streaming')
 @click.option('--verbose', '-V', is_flag=True, help='Verbose output')
-def stream(notebook, url, start, end, timeout, verbose):
+@click.option('--stop-on-error/--continue-on-error', default=True, help='Stop on error')
+def stream(notebook, url, start, end, timeout, verbose, stop_on_error):
     """
     Run a Jupyter Notebook with REAL-TIME STREAMING output.
     
@@ -765,8 +766,11 @@ def stream(notebook, url, start, end, timeout, verbose):
 
     start_time = time.time()
     total_outputs = 0
+    execution_stopped = False
 
     for cell in code_cells:
+        if execution_stopped:
+            break
         console.print(f"\n[bold blue]{t('cell_header', index=cell.index)}[/bold blue]")
         if verbose:
             syntax = Syntax(cell.source, "python", theme="monokai", line_numbers=False)
@@ -790,9 +794,16 @@ def stream(notebook, url, start, end, timeout, verbose):
                     console.print(f"\n[green]{content}[/green]")
                 elif msg_type == "error":
                     console.print(f"\n[red]❌ {content}[/red]")
+                    if stop_on_error:
+                        execution_stopped = True
+                        break
                 elif msg_type == "skipped":
                     console.print(f"[dim]⏭️ {content}[/dim]")
-                    
+
+            if execution_stopped and stop_on_error:
+                console.print(f"\n[yellow]{t('stream_stopped_on_error')}[/yellow]")
+                break
+
         except KeyboardInterrupt:
             console.print(f"\n[yellow]{t('interrupting')}[/yellow]")
             # Send interrupt to server
@@ -803,6 +814,8 @@ def stream(notebook, url, start, end, timeout, verbose):
             console.print(f"\n[red]{t('stream_error', error=str(e))}[/red]")
             if verbose:
                 console.print(f"[dim]{traceback.format_exc()}[/dim]")
+            if stop_on_error:
+                execution_stopped = True
 
     total_time = time.time() - start_time
 
