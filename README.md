@@ -20,11 +20,13 @@ A powerful command-line tool to run Jupyter Notebooks with streaming output.
 1. Deploy server on Google Colab (open [colab_server.ipynb](colab_server.ipynb))
 2. Install CLI: `pip install git+https://github.com/ctz168/colabcli.git`
 3. Run: `colabmcp stream notebook.ipynb -u https://aitun.cc/your-code`
+4. One-shot for AI agents (quoting-proof): `echo samaicmdbegin... | colabmcp exec -u https://aitun.cc/your-code --json`
 
 ### 中文
 1. 在 Google Colab 上部署服务器（打开 [colab_server.ipynb](colab_server.ipynb)）
 2. 安装 CLI：`pip install git+https://github.com/ctz168/colabcli.git`
 3. 运行：`colabmcp stream notebook.ipynb -u https://aitun.cc/your-code`
+4. AI agent 一发式执行（防引号地狱）：`echo samaicmdbegin... | colabmcp exec -u https://aitun.cc/your-code --json`
 
 ## 📄 License
 

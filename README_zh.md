@@ -138,6 +138,55 @@ colabmcp watch -u https://aitun.cc/your-code -d 300
 - 短任务使用 `remote`（数据处理、快速脚本）
 - 长时间运行的任务使用 `stream`（训练、Bot、服务器）
 
+### 🆕 一发式 `exec` — AI agent 防引号地狱模式 (v2.2.0)
+
+AI agent（或聊天机器人）把代码发给 colabmcp 时，命令文本往往要穿过各种会破坏引号的
+传输层：IM 网关吞掉 `"`、智能引号转换把 `"` 变成 “ ”、shell 反复解析反斜杠。
+代码到达内核时引号早已面目全非（"引号地狱"）。
+
+`colabmcp exec` 用 **Samai Command Envelope（信封协议）** 解决：代码被包在纯 ASCII
+标记之间，负载是 base64url（只含 `[A-Za-z0-9-_]`，任何网关都无法破坏），
+并带 CRC32 校验捕捉残余损坏。
+
+```bash
+# 1) 最安全 — 信封走 stdin（负载 base64url，CRC 校验）：
+cat <<'EOF' | colabmcp exec -u https://aitun.cc/your-code --json
+samaicmdbegin
+v=1
+enc=b64url
+crc=d2fda775
+cHJpbnQoJ2hlbGxvIHdvcmxkJykK
+samaicmdend
+EOF
+
+# 2) 防引号 argv — 纯 [A-Za-z0-9_-] 参数，完全无需转义：
+colabmcp exec -u https://aitun.cc/your-code --c64 cHJpbnQoJ2hpJykK --json
+
+# 3) 普通代码（人类便利模式）：
+colabmcp exec -u https://aitun.cc/your-code -c "print('hello')"
+
+# 实时流式输出（默认，人类友好）：
+colabmcp exec -u https://aitun.cc/your-code < code.py
+
+# agent 模式：原始服务器 JSON + 退出码 0/1
+colabmcp exec -u https://aitun.cc/your-code --json < env.txt
+```
+
+信封生成器（任意语言，此处 Python）：
+
+```python
+import base64, zlib
+code = "print('你好, \"带引号\" 世界')"
+payload = code.encode()
+b64 = base64.urlsafe_b64encode(payload).decode().rstrip("=")
+print("samaicmdbegin\nv=1\nenc=b64url\ncrc=%08x\n%s\nsamaicmdend"
+      % (zlib.crc32(payload) & 0xffffffff, b64))
+```
+
+服务端：`/execute` 与 `/execute_stream` 也接受信封作为原始请求体（代替 JSON），
+所有端点支持 `?respenc=b64url` —— 文本字段（`stdout`/`stderr`/`error`/`traceback`）
+以 `*_b64`（base64url）返回，让**返回路径**经过聊天桥接时同样字节无损。
+旧 JSON 客户端完全不受影响。
 ### 其他命令
 
 ```bash
@@ -733,6 +782,12 @@ fi
 3. **复制公网 URL**，并与 `colabmcp remote` 或 `colabmcp stream` 一起使用
 
 ---
+
+### v2.2.0（最新）
+- 🆕 新增 `colabmcp exec` 一发式命令，支持 Samai Command Envelope —— 为 AI agent 提供防引号地狱的代码投递（stdin 信封 / `--c64` base64url 参数 / 普通 `-c`）
+- 🆕 `/execute` 与 `/execute_stream` 接受信封请求体（CRC32 校验、抗换行破坏的 base64url 负载），作为 JSON 之外的新选择
+- 🆕 所有端点支持 `?respenc=b64url` —— 文本响应字段以 `*_b64` 返回，返回路径经过 IM/聊天网关同样字节无损
+- ✨ 版本号统一为 2.2.0
 
 ## 📋 更新日志
 

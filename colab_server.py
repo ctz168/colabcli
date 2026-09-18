@@ -192,6 +192,148 @@ def _interrupt_thread(thread):
     return True
 
 # ============== API Endpoints ==============
+
+# ====== Samai Command Envelope (SCE) v1 — quoting-proof framing (v2.2.0) ======
+# Self-contained port of samaidev/samcommand internal/envelope (MIT).
+# Why: AI-agent commands often travel through quote-mangling transports
+# (IM gateways, chat bridges). The envelope wraps code in
+#     samaicmdbegin / v=1 / enc=b64url / crc=<crc32> / <b64url payload> / samaicmdend
+# so the payload contains ONLY [A-Za-z0-9-_] — nothing any gateway can mangle.
+# /execute and /execute_stream accept such a body as an alternative to JSON,
+# and any endpoint honours ?respenc=b64url on the way back (text fields move
+# into *_b64 so the RETURN path survives chat bridges too).
+
+_SCE_BEGIN = "samaicmdbegin"
+_SCE_END = "samaicmdend"
+
+
+def _sce_parse(text):
+    """Decode the first Samai Command Envelope in *text*; returns payload bytes.
+
+    Faithful port of the Go parser semantics: only v=/enc=/crc= are headers;
+    b64/b64url/hex payloads ignore ALL whitespace (re-wrapped lines are
+    harmless), padding is optional, both base64 alphabets auto-detected;
+    raw payloads join lines with \n; CRC32 verified when present."""
+    import base64 as _b64
+    import binascii as _ba
+    import zlib as _zlib
+    lines = text.replace("\r\n", "\n").split("\n")
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == _SCE_BEGIN), -1)
+    if start < 0:
+        raise ValueError("envelope: no '%s' marker found" % _SCE_BEGIN)
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].strip() == _SCE_END), -1)
+    if end < 0:
+        raise ValueError("envelope: no '%s' marker found" % _SCE_END)
+    ver, enc, crc = "1", "b64url", ""
+    body = start + 1
+    while body < end:
+        s = lines[body].lstrip(" \t")
+        if s.startswith("v="):
+            ver = s[2:].strip()
+            if ver != "1":
+                raise ValueError("envelope: unsupported v= (only v=1): %r" % ver)
+        elif s.startswith("enc="):
+            enc = s[4:].strip().lower()
+        elif s.startswith("crc="):
+            crc = s[4:].strip().lower()
+        else:
+            break
+        body += 1
+    body_lines = lines[body:end]
+    if not body_lines or all(not ln.strip() for ln in body_lines):
+        raise ValueError("envelope: empty payload")
+    joined = "\n".join(body_lines)
+    if enc == "raw":
+        for ln in body_lines:
+            if ln.strip() == _SCE_END:
+                raise ValueError("envelope: raw payload contains the end marker")
+        payload = joined.encode("utf-8")
+    elif enc in ("b64", "b64url", "hex"):
+        s = re.sub(r"[ \t\r\n\v\f]+", "", joined).rstrip("=")
+        try:
+            if enc == "hex":
+                payload = _ba.unhexlify(s.lower())
+            elif enc == "b64url":
+                try:
+                    if re.search(r"[+/]", s):
+                        raise ValueError("std alphabet")
+                    payload = _b64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+                except Exception:
+                    payload = _b64.b64decode(s + "=" * (-len(s) % 4))
+            else:
+                dec = _b64.urlsafe_b64decode if re.search(r"[-_]", s) else _b64.b64decode
+                payload = dec(s + "=" * (-len(s) % 4))
+        except Exception as e:
+            raise ValueError("envelope: payload decode failed (%s): %s" % (enc, e))
+    else:
+        raise ValueError("envelope: unknown enc= (use raw | b64url | b64 | hex): %r" % enc)
+    if crc:
+        want = "%08x" % (_zlib.crc32(payload) & 0xFFFFFFFF)
+        if want != crc:
+            raise ValueError("envelope: crc mismatch — payload corrupted in transit "
+                             "(want %s, got %s) — re-send with enc=b64url" % (crc, want))
+    if len(payload) > (16 << 20):
+        raise ValueError("envelope: payload too large")
+    return payload
+
+
+def _parse_exec_request():
+    """Shared body parser for /execute and /execute_stream.
+
+    Accepts:
+      1. legacy JSON body: {"code": "...", "timeout": N}
+      2. a Samai Command Envelope as the raw text body (quoting-proof agent
+         input); optional ?timeout=N query param applies in envelope mode.
+    Returns (code, timeout, error_response_or_None)."""
+    raw = request.get_data(cache=True, as_text=True) or ""
+    if _SCE_BEGIN in raw:
+        try:
+            code = _sce_parse(raw).decode("utf-8", "replace")
+        except Exception as e:
+            return "", 600, {"success": False, "error": str(e), "error_type": "EnvelopeError"}
+        try:
+            timeout = min(int(request.args.get("timeout", 600)), 1800)
+        except (TypeError, ValueError):
+            timeout = 600
+        return code, timeout, None
+    data = request.get_json(silent=True) or {}
+    try:
+        timeout = min(int(data.get("timeout", 600)), 1800)
+    except (TypeError, ValueError):
+        timeout = 600
+    return data.get("code", ""), timeout, None
+
+
+@app.after_request
+def _sce_respenc(response):
+    """?respenc=b64url — move JSON text fields into *_b64 (base64url) so the
+    return path through quote-mangling transports stays byte-exact.
+    SSE streams are untouched (clients needing respenc should use /execute)."""
+    try:
+        if request.args.get("respenc", "") != "b64url":
+            return response
+        if response.mimetype != "application/json":
+            return response
+        data = response.get_json(silent=True)
+        if not isinstance(data, dict):
+            return response
+        import base64 as _b64
+        changed = False
+        for k in ("stdout", "stderr", "error", "error_type", "traceback"):
+            v = data.get(k)
+            if isinstance(v, str) and v:
+                data[k + "_b64"] = _b64.urlsafe_b64encode(v.encode("utf-8")).decode("ascii").rstrip("=")
+                data[k] = ""
+                changed = True
+        if changed:
+            response.data = json.dumps(data, ensure_ascii=False)
+    except Exception:
+        pass
+    return response
+
+# ====== end Samai Command Envelope block ======
+
+
 @app.route('/', methods=['GET'])
 def index():
     return jsonify({
@@ -304,9 +446,9 @@ def execute_code():
     current_execution_thread = threading.current_thread()
 
     try:
-        data = request.get_json()
-        code = data.get('code', '')
-        timeout = min(data.get('timeout', 600), 1800)
+        code, timeout, _env_err = _parse_exec_request()
+        if _env_err is not None:
+            return jsonify(_env_err)
 
         if not code:
             return jsonify({"success": False, "error": "No code provided"})
@@ -434,9 +576,11 @@ def execute_code_stream():
     stream_active = True
     interrupt_requested = False
 
-    data = request.get_json()
-    code = data.get('code', '')
-    timeout = min(data.get('timeout', 600), 1800)
+    code, timeout, _env_err = _parse_exec_request()
+    if _env_err is not None:
+        stream_output_queue.put({"type": "error", "content": str(_env_err.get("error", "bad request"))})
+        stream_output_queue.put(None)
+        return Response(generate_sse(stream_output_queue), mimetype='text/event-stream')
 
     if not code:
         stream_output_queue.put({"type": "error", "content": "No code provided"})

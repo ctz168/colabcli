@@ -138,6 +138,57 @@ colabmcp watch -u https://aitun.cc/your-code -d 300
 - Use `remote` for short tasks (data processing, quick scripts)
 - Use `stream` for long-running tasks (training, bots, servers)
 
+### 🆕 One-shot `exec` — quoting-proof mode for AI agents (v2.2.0)
+
+When an AI agent (or a chat bot) sends code to colabmcp, the command text often travels
+through transports that mangle quotes: IM gateways eat `"`, smart-quote converters
+turn `"` into “ ”, shells re-parse backslashes. By the time the code reaches the
+kernel, quoting is destroyed ("quoting hell").
+
+`colabmcp exec` fixes this with the **Samai Command Envelope**: the code is wrapped in
+plain-ASCII markers with a base64url payload (only `[A-Za-z0-9-_]` — nothing any
+gateway can mangle) plus a CRC32 checksum that catches residual corruption.
+
+```bash
+# 1) SAFEST — envelope on stdin (payload is base64url, CRC-verified):
+cat <<'EOF' | colabmcp exec -u https://aitun.cc/your-code --json
+samaicmdbegin
+v=1
+enc=b64url
+crc=d2fda775
+cHJpbnQoJ2hlbGxvIHdvcmxkJykK
+samaicmdend
+EOF
+
+# 2) quoting-proof argv — pure [A-Za-z0-9_-] argument, no escaping at all:
+colabmcp exec -u https://aitun.cc/your-code --c64 cHJpbnQoJ2hpJykK --json
+
+# 3) plain code (convenience for humans):
+colabmcp exec -u https://aitun.cc/your-code -c "print('hello')"
+
+# live streaming output (default, human-friendly):
+colabmcp exec -u https://aitun.cc/your-code < code.py
+
+# agent mode: raw server JSON + exit code 0/1
+colabmcp exec -u https://aitun.cc/your-code --json < env.txt
+```
+
+Envelope generator (any language, here Python):
+
+```python
+import base64, zlib, sys
+code = "print('你好, \"quoted\" 世界')"
+payload = code.encode()
+b64 = base64.urlsafe_b64encode(payload).decode().rstrip("=")
+print("samaicmdbegin\nv=1\nenc=b64url\ncrc=%08x\n%s\nsamaicmdend"
+      % (zlib.crc32(payload) & 0xffffffff, b64))
+```
+
+Server-side: `/execute` and `/execute_stream` also accept an envelope as the raw
+request body (instead of JSON), and every endpoint honours `?respenc=b64url` —
+text fields (`stdout`/`stderr`/`error`/`traceback`) come back as `*_b64`
+(base64url) so the RETURN path through chat bridges stays byte-exact too.
+Legacy JSON clients keep working unchanged.
 ### Other Commands
 
 ```bash
@@ -733,6 +784,12 @@ This CLI works seamlessly with Google Colab:
 3. **Copy the public URL** and use it with `colabmcp remote` or `colabmcp stream`
 
 ---
+
+### v2.2.0 (Latest)
+- 🆕 Added `colabmcp exec` one-shot command with Samai Command Envelope support — quoting-proof code delivery for AI agents (stdin envelope / `--c64` base64url argv / plain `-c`)
+- 🆕 `/execute` + `/execute_stream` accept an envelope body (CRC32-verified, whitespace-immune base64url payload) as an alternative to JSON
+- 🆕 `?respenc=b64url` on all endpoints — text response fields returned as `*_b64` so the return path through IM/chat gateways stays byte-exact
+- ✨ Version strings unified to 2.2.0
 
 ## 📋 Changelog
 

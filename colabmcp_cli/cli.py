@@ -888,5 +888,112 @@ def watch(url, duration):
         console.print(f"\n\n[yellow]{t('watch_stopped')}[/yellow]")
 
 
+
+
+@main.command(name='exec')
+@click.option('--url', '-u', required=True, help='colabmcp server URL')
+@click.option('--code', '-c', default=None, help='Code to execute (stdin is read when omitted)')
+@click.option('--c64', default=None, help='base64url-encoded code — quoting-proof argv for agents')
+@click.option('--timeout', '-t', default=600, help='Timeout in seconds')
+@click.option('--json', 'json_out', is_flag=True, default=False,
+              help='Emit the raw server JSON result (agent-friendly; exit 0 success / 1 error)')
+def exec_code(url, code, c64, timeout, json_out):
+    """
+    Execute ONE code snippet on the colabmcp server — one-shot, quoting-proof.
+
+    Built for AI agents whose command text must survive quote-mangling
+    transports (IM gateways, chat bridges). Three input modes, safest first:
+
+    \b
+      1. Samai Command Envelope on stdin — payload is base64url, CRC-checked:
+
+             cat env.txt | colabmcp exec -u URL
+
+      2. --c64 <base64url-of-code> — a pure [A-Za-z0-9_-] argv, no quoting
+
+      3. -c 'code' or plain stdin — convenience for humans
+
+    The envelope is auto-detected on stdin; plain stdin is sent as-is.
+    """
+    import base64 as b64mod
+    from . import envelope as sce
+
+    source_desc = "-c"
+    if c64:
+        try:
+            code = b64mod.urlsafe_b64decode(c64 + "=" * (-len(c64) % 4)).decode("utf-8")
+        except Exception as e:
+            console.print(f"[red]{t('exec_bad_c64', err=str(e))}[/red]")
+            sys.exit(2)
+        source_desc = "--c64"
+    else:
+        from_stdin = code is None and not sys.stdin.isatty()
+        raw = code if code is not None else (sys.stdin.read() if from_stdin else "")
+        if not raw:
+            console.print(f"[red]{t('exec_no_input')}[/red]")
+            sys.exit(2)
+        if sce.sniff(raw):
+            try:
+                code = sce.parse(raw).decode("utf-8", "replace")
+            except sce.EnvelopeError as e:
+                console.print(f"[red]{t('exec_envelope_bad', err=str(e))}[/red]")
+                sys.exit(2)
+            source_desc = "envelope (CRC OK)"
+            if not json_out:
+                console.print(f"[dim]{t('exec_envelope_ok')}[/dim]")
+        else:
+            code = raw
+            source_desc = "stdin" if from_stdin else "-c"
+
+    engine = RemoteExecutionEngine(url, timeout=timeout)
+
+    if json_out:
+        try:
+            code = engine._prepare_code(code)   # magic/!cmd support, same as cells
+            resp = engine.session.post(
+                f"{engine.base_url}/execute",
+                params={"respenc": "b64url"},
+                json={"code": code, "timeout": timeout},
+                timeout=timeout + 30,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+        except Exception as e:
+            console.print(f"[red]{t('failed_connect', error=str(e))}[/red]")
+            sys.exit(2)
+        for k in ("stdout", "stderr", "error", "error_type", "traceback"):
+            v = result.pop(k + "_b64", None)
+            if v and not result.get(k):
+                result[k] = sce.decode_maybe_b64url(v) or ""
+        print(json.dumps(result, ensure_ascii=False))
+        sys.exit(0 if result.get("success") else 1)
+
+    # human mode: live-stream via SSE
+    health = engine.health_check()
+    if "error" in health:
+        console.print(f"[red]{t('failed_connect', error=health['error'])}[/red]")
+        sys.exit(2)
+
+    cell = NotebookCell(index=0, cell_type=CellType.CODE, source=code)
+    had_error = False
+    try:
+        for msg in engine.execute_streaming(cell):
+            mtype = msg.get("type", "unknown")
+            content = msg.get("content", "")
+            if mtype == "stdout":
+                console.print(content, end="")
+            elif mtype == "stderr":
+                console.print(f"[yellow]{content}[/yellow]", end="")
+            elif mtype == "error":
+                had_error = True
+                console.print(f"\n[red]{t('exec_cell_error', err=content)}[/red]")
+            elif mtype == "status":
+                console.print(f"[dim]{content}[/dim]")
+    except KeyboardInterrupt:
+        console.print(f"\n[yellow]{t('execution_interrupted')}[/yellow]")
+        sys.exit(130)
+    sys.exit(1 if had_error else 0)
+
+
 if __name__ == '__main__':
     main()

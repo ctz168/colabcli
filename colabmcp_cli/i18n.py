@@ -18,6 +18,11 @@ if _LANG not in ('en', 'zh'):
 
 TRANSLATIONS = {
     'en': {
+        'exec_cell_error': 'Execution error: {err}',
+        'exec_envelope_bad': 'Envelope rejected: {err}',
+        'exec_envelope_ok': 'Envelope accepted — CRC verified, quoting-proof payload decoded',
+        'exec_bad_c64': 'Invalid --c64 (not valid base64url): {err}',
+        'exec_no_input': 'No input: use -c \'code\', --c64 <b64url>, or pipe code/envelope to stdin',
         # ============ Generic ============
         'loading_notebook': '📖 Loading notebook: {name}',
         'failed_load': '❌ Failed to load notebook: {error}',
