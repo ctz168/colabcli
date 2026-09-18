@@ -71,3 +71,15 @@
 ### 验证结果
 - ✅ 三个文件均创建成功，编码 utf-8-sig
 - ✅ 入口文件指向 README_en.md（默认英文）和 README_zh.md
+
+
+## 2026-09-18 - v2.2.1 信封文档可见化（隧道横幅 + 根路径）
+
+- 用户报告：输出 aitun 隧道域名的地方没有信封介绍，agent 无法发现信封用法
+- 修复：colabcli.ipynb / colab_server.ipynb 隧道横幅新增 AGENT 信封段落（现成信封示例
+  CRC 运行时实算、自建信封一行命令、respenc/timeout 说明、断线重连提示）
+- colab_server.py 根路径 GET / 新增 envelope 字段；版本统一 2.2.1
+- **发现并修复严重脱同步**：colabcli.ipynb 的 %%writefile 单元停留在 v2.1.0 服务端
+  （缺 i18n/信封/流式修复，632 行差距）—— 一键部署路径此前装出的服务端无信封能力
+- E2E：本地起服务端，横幅现成信封一发命中回显 42；CRC 篡改正确拒收；
+  自建信封一行命令 + 引号地狱载荷通过；/execute_stream 信封 body 通过

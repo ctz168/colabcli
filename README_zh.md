@@ -3,7 +3,7 @@
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ctz168/colabcli/blob/main/colab_server.ipynb)
 [![GitHub](https://img.shields.io/badge/GitHub-ctz168%2Fcolabcli-blue?logo=github)](https://github.com/ctz168/colabcli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version](https://img.shields.io/badge/version-2.1.0-green.svg)](https://github.com/ctz168/colabcli)
+[![Version](https://img.shields.io/badge/version-2.2.1-green.svg)](https://github.com/ctz168/colabcli)
 
 一个强大的命令行工具，用于运行 Jupyter Notebook（`.ipynb`），支持**逐 cell 流式输出**，以及针对长时间运行任务的**实时 SSE 流式**功能。
 
@@ -751,7 +751,7 @@ fi
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      ColabCLI v2.1.0                        │
+│                      ColabCLI v2.2.1                        │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────┐   ┌─────────────┐   ┌─────────────────┐   │
 │  │   CLI       │   │  Notebook   │   │   Execution     │   │
@@ -783,7 +783,14 @@ fi
 
 ---
 
-### v2.2.0（最新）
+### v2.2.1（最新）
+
+- 🤖 **隧道横幅新增 AGENT 信封通道说明**：aitun 隧道建立时直接打印 Samai Command Envelope 完整用法 —— 现成可跑的信封示例（真实 URL + 运行时实算 CRC32，原样粘贴、回显 42 即全通）、信封格式、自建信封一行命令、`?respenc=b64url` / `?timeout=` 参数说明；隧道断线重连后的"新公网 URL"行同步提示信封通道随新 URL 生效
+- 📡 **服务器根路径 `GET /` 新增 `envelope` 字段**：探测根路径的 agent 也能发现信封协议
+- 🚑 **修复一键部署 notebook 的 writefile 单元严重脱同步**：部署单元内的服务端仍停留在旧版本（缺 i18n、缺信封、缺流式修复）—— 现已与服务端 .py 逐字节同步
+- 🔖 版本号统一为 2.2.1
+
+### v2.2.0
 - 🆕 新增 `colabmcp exec` 一发式命令，支持 Samai Command Envelope —— 为 AI agent 提供防引号地狱的代码投递（stdin 信封 / `--c64` base64url 参数 / 普通 `-c`）
 - 🆕 `/execute` 与 `/execute_stream` 接受信封请求体（CRC32 校验、抗换行破坏的 base64url 负载），作为 JSON 之外的新选择
 - 🆕 所有端点支持 `?respenc=b64url` —— 文本响应字段以 `*_b64` 返回，返回路径经过 IM/聊天网关同样字节无损

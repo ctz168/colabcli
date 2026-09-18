@@ -338,12 +338,18 @@ def _sce_respenc(response):
 def index():
     return jsonify({
         "name": "ColabCLI Server",
-        "version": "2.2.0",
+        "version": "2.2.1",
         "status": "running",
         "uptime_minutes": round((time.time() - start_time) / 60, 2),
         "current_directory": execution_state["current_directory"],
         "is_executing": execution_state["is_executing"],
-        "endpoints": ["/health", "/probe", "/execute", "/execute_stream", "/interrupt", "/status", "/history", "/variables", "/files", "/cleanup"]
+        "endpoints": ["/health", "/probe", "/execute", "/execute_stream", "/interrupt", "/status", "/history", "/variables", "/files", "/cleanup"],
+        "envelope": {
+            "name": "Samai Command Envelope - quoting-proof raw-text exec for AI agents",
+            "format": "samaicmdbegin / v=1 / enc=b64url / crc=<crc32(payload) as 8 lowercase hex> / <b64url payload, 76 chars per line> / samaicmdend",
+            "usage": "POST /execute (or /execute_stream) with the envelope as the raw text/plain body; payload is python code; crc = zlib.crc32(payload) & 0xffffffff; timeout via ?timeout=N (default 600, cap 1800)",
+            "response": "append ?respenc=b64url to move stdout/stderr/error/error_type/traceback into *_b64 (unpadded urlsafe b64) so quote-mangling transports stay byte-exact"
+        }
     })
 
 @app.route('/health', methods=['GET'])
@@ -830,7 +836,7 @@ if __name__ == '__main__':
     print("\n" + "="*60)
     print(t('server_starting'))
     print("="*60)
-    print(t('server_version', version='2.2.0'))
+    print(t('server_version', version='2.2.1'))
     print(t('server_features', features='Heartbeat + Error isolation + Interrupt + Status tracking + SSE streaming'))
     print(t('server_optimization', optimization='Long-task stability + Non-blocking heartbeat + 600s timeout'))
     print("="*60 + "\n")
